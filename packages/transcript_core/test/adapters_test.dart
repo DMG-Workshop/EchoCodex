@@ -210,6 +210,33 @@ void main() {
   });
 
   group('Gemini', () {
+    test('the default model is one Google still serves', () async {
+      // Google retires ids fairly aggressively. `gemini-2.0-flash` was the default
+      // here until it stopped being served, which showed up on a device as
+      // "pick one of the listed models" against a key that was perfectly good —
+      // the model id is in the URL, so a stale default fails every request.
+      final transport = RecordingTransport.single(HttpReply(
+        200,
+        jsonEncode({
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': '{"x":"ok"}'}
+                ]
+              }
+            }
+          ],
+        }),
+      ));
+
+      await GeminiStructuringProvider(transport: transport, apiKey: 'g')
+          .structure(structureRequest);
+
+      expect(GeminiStructuringProvider.defaultModel, 'gemini-2.5-flash');
+      expect(transport.lastCall.url.path, contains('gemini-2.5-flash'));
+    });
+
     test('renders the schema into the OpenAPI subset', () async {
       final transport = RecordingTransport.single(HttpReply(
         200,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:transcript_app/src/settings/connection_test_controller.dart';
 import 'package:transcript_app/src/settings/provider_config.dart';
 import 'package:transcript_app/src/settings/secure_key_store.dart';
 import 'package:transcript_app/src/recording/recording_controller.dart';
@@ -14,14 +15,16 @@ void main() {
   // The screen is two full provider sections tall. The default 800x600 test viewport
   // leaves the second one unbuilt, so these tests run on a surface that fits both.
   setUp(() {
-    final view = TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
         .implicitView!;
     view.physicalSize = const Size(1200, 2600);
     view.devicePixelRatio = 1.0;
   });
 
   tearDown(() {
-    final view = TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher
+    final view = TestWidgetsFlutterBinding.ensureInitialized()
+        .platformDispatcher
         .implicitView!;
     view.resetPhysicalSize();
     view.resetDevicePixelRatio();
@@ -73,14 +76,17 @@ void main() {
     expect(find.text('Claude'), findsOneWidget);
   });
 
-  testWidgets('the default transcription option needs no key at all', (tester) async {
+  testWidgets('the default transcription option needs no key at all',
+      (tester) async {
     await pumpSettings(tester, []);
 
-    expect(ProviderKind.forStage(ProviderStage.transcription).first.needsKey, isFalse);
+    expect(ProviderKind.forStage(ProviderStage.transcription).first.needsKey,
+        isFalse);
     expect(find.textContaining('Free, offline, no key'), findsOneWidget);
   });
 
-  testWidgets('testing without a key says so instead of calling out', (tester) async {
+  testWidgets('testing without a key says so instead of calling out',
+      (tester) async {
     final transport = RecordingTransport(const []);
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
@@ -133,16 +139,19 @@ void main() {
     expect(find.textContaining('claude-sonnet-5'), findsOneWidget);
   });
 
-  testWidgets('a rejected key gets an explanation and a remedy', (tester) async {
+  testWidgets('a rejected key gets an explanation and a remedy',
+      (tester) async {
     final store = InMemoryKeyStore();
     await store.write('anthropic', 'sk-wrong');
 
     await pumpSettings(
       tester,
       [
-        HttpReply(401, jsonEncode({
-          'error': {'message': 'invalid x-api-key'},
-        })),
+        HttpReply(
+            401,
+            jsonEncode({
+              'error': {'message': 'invalid x-api-key'},
+            })),
       ],
       keys: store,
     );
@@ -192,7 +201,9 @@ void main() {
 
     await pumpSettings(
       tester,
-      [HttpReply(200, jsonEncode({'data': <Object>[]}))],
+      [
+        HttpReply(200, jsonEncode({'data': <Object>[]}))
+      ],
       keys: store,
     );
 
@@ -215,7 +226,8 @@ void main() {
         reason: 'an unconfigured app has not earned a privacy claim');
   });
 
-  testWidgets('choosing a local model earns the on-network claim', (tester) async {
+  testWidgets('choosing a local model earns the on-network claim',
+      (tester) async {
     await pumpSettings(tester, []);
 
     await tester.ensureVisible(find.text('Ollama'));
@@ -223,7 +235,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nothing leaves your network'), findsOneWidget);
-    expect(find.textContaining('does not work in airplane mode'), findsOneWidget,
+    expect(
+        find.textContaining('does not work in airplane mode'), findsOneWidget,
         reason: 'the phone still has to reach the machine running the model');
   });
 
@@ -270,7 +283,115 @@ void main() {
   });
 
   test('a stored key is masked rather than displayed', () {
-    expect(SecureKeyStore.mask('sk-ant-api03-abcdefghijklmnop'), 'sk-••••••••mnop');
+    expect(SecureKeyStore.mask('sk-ant-api03-abcdefghijklmnop'),
+        'sk-••••••••mnop');
     expect(SecureKeyStore.mask('short'), '•••••');
   });
+
+  group('testing a keyless provider', () {
+    ProviderFactory factoryWith(LiveTranscriptionSource source) =>
+        ProviderFactory(
+          RecordingTransport(const []),
+          InMemoryKeyStore(),
+          whisperEngine: _UnusedWhisperEngine(),
+          liveSource: () => source,
+        );
+
+    test('on-device recognition is tested, not told to paste a key', () async {
+      // On a real device this reported "Paste a key above, then test again" for a
+      // provider that takes no key — the factory has no TranscriptionProvider for it
+      // (it listens to the mic, so it is a LiveTranscriptionSource) and the null
+      // branch assumed a missing key was the only way to get there.
+      final controller = ConnectionTestController(
+        factoryWith(_FakeLiveSource(
+          ConnectionResult.success(summary: 'Ready · on-device · 3 languages'),
+        )),
+      );
+
+      await controller.run(
+        const ProviderSelection(kind: ProviderKind.onDeviceStt),
+        ProviderStage.transcription,
+      );
+
+      final state = controller.state as ConnectionTestDone;
+      expect(state.result.ok, isTrue);
+      expect(state.result.summary, contains('on-device'));
+    });
+
+    test('an unavailable recognizer reports why, without mentioning keys',
+        () async {
+      final controller = ConnectionTestController(
+        factoryWith(_FakeLiveSource(
+          ConnectionResult.failure(
+            summary: 'Speech recognition is unavailable on this device',
+            remedy: 'Check that dictation is enabled in system settings.',
+          ),
+        )),
+      );
+
+      await controller.run(
+        const ProviderSelection(kind: ProviderKind.onDeviceStt),
+        ProviderStage.transcription,
+      );
+
+      final state = controller.state as ConnectionTestDone;
+      expect(state.result.ok, isFalse);
+      expect(state.result.summary, contains('unavailable'));
+      expect(state.result.remedy, isNot(contains('key')),
+          reason: 'nothing here takes a key');
+    });
+  });
+}
+
+/// Returns a fixed test result, standing in for the platform recognizer.
+class _FakeLiveSource extends LiveTranscriptionSource {
+  _FakeLiveSource(this._result);
+
+  final ConnectionResult _result;
+
+  @override
+  ProviderId get id => const ProviderId('fake-on-device');
+
+  @override
+  String get displayName => 'Fake on-device';
+
+  @override
+  ProviderCapabilities get capabilities => const ProviderCapabilities(
+        acceptsAudio: true,
+        acceptsText: false,
+        nativeJsonSchema: false,
+        streaming: true,
+        requiresApiKey: false,
+        runsOnDevice: true,
+      );
+
+  @override
+  Stream<TranscriptSegment> get segments => const Stream.empty();
+
+  @override
+  Future<ConnectionResult> test() async => _result;
+
+  @override
+  Future<void> start({String? languageHint}) async {}
+
+  @override
+  Future<void> stop() async {}
+}
+
+/// Never called: these tests only exercise the on-device path, and constructing the
+/// real engine would reach for a plugin channel the test binding does not have.
+class _UnusedWhisperEngine implements WhisperEngine {
+  @override
+  Future<bool> isModelReady(String modelId) async => throw UnimplementedError();
+
+  @override
+  Future<String?> modelPath(String modelId) async => throw UnimplementedError();
+
+  @override
+  Future<List<TranscriptSegment>> transcribe({
+    required String modelPath,
+    required List<int> pcm16,
+    String? languageHint,
+  }) async =>
+      throw UnimplementedError();
 }
