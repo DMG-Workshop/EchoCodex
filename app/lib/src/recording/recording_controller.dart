@@ -431,6 +431,24 @@ final settingsStoreProvider = Provider<SettingsStore>(
   (ref) => throw UnimplementedError('settingsStoreProvider must be overridden'),
 );
 
+/// Whether the note-writing stage can actually run right now — a provider chosen *and*
+/// its key or address actually present, not just remembered as "the last one picked".
+/// A key cleared later in Settings must count as unconfigured the same as never having
+/// chosen one, so this checks the key store fresh rather than trusting the saved kind.
+///
+/// Recording itself never depends on this: on-device transcription needs nothing, so
+/// recording-only use keeps working when nothing here is set up.
+final structuringReadyProvider = FutureProvider<bool>((ref) async {
+  final settings = ref.watch(settingsStoreProvider);
+  final kind = settings.kindFor(ProviderStage.structuring);
+  if (kind == null) return false;
+  if (kind.needsKey) return ref.watch(keyStoreProvider).has(kind.id);
+  if (kind.needsEndpoint) {
+    return (settings.endpointFor(kind) ?? '').trim().isNotEmpty;
+  }
+  return true;
+});
+
 final recordingControllerProvider =
     StateNotifierProvider<RecordingController, RecordState>(
   (ref) => RecordingController(
