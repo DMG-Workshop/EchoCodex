@@ -12,21 +12,28 @@ class DioTransport implements HttpTransport {
       InterceptorsWrapper(
         onError: (e, handler) {
           // Never let a header carrying an API key reach a log sink or crash report.
-          e.requestOptions.headers.removeWhere((k, _) => _secretHeaders.contains(k));
+          e.requestOptions.headers
+              .removeWhere((k, _) => _secretHeaders.contains(k));
           handler.next(e);
         },
       ),
     );
   }
 
-  static const _secretHeaders = {'x-api-key', 'authorization', 'x-goog-api-key'};
+  static const _secretHeaders = {
+    'x-api-key',
+    'authorization',
+    'x-goog-api-key'
+  };
 
   final Dio _dio;
 
   @override
   Future<HttpReply> send(HttpCall call) async {
     try {
-      final response = await _dio.requestUri<String>(
+      final binaryResponse =
+          call.headers.keys.any((key) => key.toLowerCase() == 'range');
+      final response = await _dio.requestUri<dynamic>(
         call.url,
         data: call.jsonBody ?? call.bodyBytes,
         options: Options(
@@ -35,7 +42,8 @@ class DioTransport implements HttpTransport {
             ...call.headers,
             if (call.contentType != null) 'content-type': call.contentType,
           },
-          responseType: ResponseType.plain,
+          responseType:
+              binaryResponse ? ResponseType.bytes : ResponseType.plain,
           sendTimeout: call.timeout,
           receiveTimeout: call.timeout,
           // Handled by the adapters, which turn status codes into user-facing advice.
@@ -45,11 +53,14 @@ class DioTransport implements HttpTransport {
 
       return HttpReply(
         response.statusCode ?? 0,
-        response.data ?? '',
+        binaryResponse ? '' : (response.data as String? ?? ''),
         headers: {
           for (final entry in response.headers.map.entries)
             entry.key: entry.value.join(', '),
         },
+        bodyBytes: binaryResponse && response.data is List<int>
+            ? response.data as List<int>
+            : null,
       );
     } on DioException catch (e) {
       throw TransportException(_classify(e), e.message ?? e.type.name);
@@ -71,7 +82,8 @@ class DioTransport implements HttpTransport {
   static TransportFailure _classifyConnectionError(DioException e) {
     final message = e.message?.toLowerCase() ?? '';
     if (message.contains('refused')) return TransportFailure.refused;
-    if (message.contains('failed host lookup') || message.contains('nodename')) {
+    if (message.contains('failed host lookup') ||
+        message.contains('nodename')) {
       return TransportFailure.unresolved;
     }
     return TransportFailure.refused;

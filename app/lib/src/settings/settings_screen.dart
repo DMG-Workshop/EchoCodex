@@ -41,8 +41,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // keystroke — a pasted API key otherwise commits only when "Test connection" is
   // pressed, so a key typed and never tested would be silently lost without this.
   Future<void> _saveAll() async {
-    await _transcriptionSection.currentState?.saveExplicitly();
-    await _structuringSection.currentState?.saveExplicitly();
+    final transcriptionKeyAdded =
+        await _transcriptionSection.currentState?.saveExplicitly() ?? false;
+    final structuringKeyAdded =
+        await _structuringSection.currentState?.saveExplicitly() ?? false;
+    if (transcriptionKeyAdded) {
+      await _transcriptionSection.currentState?.discoverModels();
+    }
+    if (structuringKeyAdded) {
+      await _structuringSection.currentState?.discoverModels();
+    }
     if (!mounted) return;
     _onChanged();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -198,7 +206,8 @@ class _PostureHeader extends StatelessWidget {
 }
 
 class _StageSection extends ConsumerStatefulWidget {
-  const _StageSection({super.key, required this.stage, required this.onChanged});
+  const _StageSection(
+      {super.key, required this.stage, required this.onChanged});
 
   final ProviderStage stage;
 
@@ -287,22 +296,27 @@ class _StageSectionState extends ConsumerState<_StageSection> {
   /// Writes whatever is in this section right now: a typed key (the one field that does
   /// not autosave as it's typed), plus the kind/endpoint/model persisted the normal way.
   /// Used by both "Test connection" and the settings screen's explicit Save button.
-  Future<void> saveExplicitly() async {
+  Future<bool> saveExplicitly() async {
     final key = _keyController.text.trim();
+    var keyAdded = false;
     if (key.isNotEmpty) {
       await ref.read(keyStoreProvider).write(_kind.id, key);
       _keyController.clear();
       await _refreshKeyState();
+      keyAdded = true;
     }
     await _persist();
+    return keyAdded;
   }
 
   Future<void> _test() async {
     await saveExplicitly();
-    await ref
-        .read(connectionTestProvider(widget.stage).notifier)
-        .run(_selection, widget.stage);
+    await discoverModels();
   }
+
+  Future<void> discoverModels() => ref
+      .read(connectionTestProvider(widget.stage).notifier)
+      .run(_selection, widget.stage);
 
   String _whisperModelLabel() {
     final id = _modelController.text.trim().isEmpty
@@ -441,6 +455,12 @@ class _StageSectionState extends ConsumerState<_StageSection> {
             ),
           ),
         if (_kind.needsKey)
+          _CloudModelPicker(
+            state: state,
+            selectedModel: _modelController.text.trim(),
+            onChanged: _selectModel,
+          ),
+        if (_kind.needsKey)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: TextField(
@@ -448,6 +468,7 @@ class _StageSectionState extends ConsumerState<_StageSection> {
               obscureText: true,
               autocorrect: false,
               enableSuggestions: false,
+              onSubmitted: (_) => unawaited(_test()),
               decoration: InputDecoration(
                 labelText: 'API key',
                 hintText: _keySaved ? 'A key is saved' : 'Paste your key',
@@ -489,6 +510,11 @@ class _StageSectionState extends ConsumerState<_StageSection> {
         if (state is ConnectionTestDone) _ResultDetail(result: state.result),
       ],
     );
+  }
+
+  Future<void> _selectModel(String model) async {
+    setState(() => _modelController.text = model);
+    await _persist();
   }
 }
 
@@ -567,6 +593,46 @@ class _ResultDetail extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CloudModelPicker extends StatelessWidget {
+  const _CloudModelPicker({
+    required this.state,
+    required this.selectedModel,
+    required this.onChanged,
+  });
+
+  final ConnectionTestState state;
+  final String selectedModel;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state is! ConnectionTestDone) return const SizedBox.shrink();
+    final models = (state as ConnectionTestDone).result.models;
+    if (models.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: DropdownButtonFormField<String>(
+        initialValue: models.contains(selectedModel) ? selectedModel : null,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Model',
+          helperText: 'Models available to this API key.',
+          border: OutlineInputBorder(),
+        ),
+        hint: const Text('Choose a model'),
+        items: [
+          for (final model in models)
+            DropdownMenuItem<String>(value: model, child: Text(model)),
+        ],
+        onChanged: (model) {
+          if (model != null) onChanged(model);
+        },
       ),
     );
   }

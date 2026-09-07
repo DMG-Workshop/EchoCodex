@@ -31,9 +31,15 @@ class ConnectionResult {
     required String summary,
     String? detail,
     String? remedy,
+    List<String> models = const [],
   }) =>
       ConnectionResult._(
-          ok: false, summary: summary, detail: detail, remedy: remedy);
+        ok: false,
+        summary: summary,
+        detail: detail,
+        remedy: remedy,
+        models: models,
+      );
 
   final bool ok;
 

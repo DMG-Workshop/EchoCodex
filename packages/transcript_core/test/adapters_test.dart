@@ -210,6 +210,33 @@ void main() {
   });
 
   group('Gemini', () {
+    test('connection discovery excludes models without generateContent',
+        () async {
+      final transport = RecordingTransport.single(HttpReply(
+        200,
+        jsonEncode({
+          'models': [
+            {
+              'name': 'models/gemini-2.5-flash',
+              'supportedGenerationMethods': ['generateContent'],
+            },
+            {
+              'name': 'models/text-embedding-005',
+              'supportedGenerationMethods': ['embedContent'],
+            },
+          ],
+        }),
+      ));
+
+      final result = await GeminiStructuringProvider(
+        transport: transport,
+        apiKey: 'g',
+      ).test();
+
+      expect(result.ok, isTrue);
+      expect(result.models, ['gemini-2.5-flash']);
+    });
+
     test('the default model is one Google still serves', () async {
       // Google retires ids fairly aggressively. `gemini-2.0-flash` was the default
       // here until it stopped being served, which showed up on a device as

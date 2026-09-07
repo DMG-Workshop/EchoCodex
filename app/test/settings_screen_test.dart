@@ -138,6 +138,16 @@ void main() {
 
     expect(find.textContaining('Connected'), findsOneWidget);
     expect(find.textContaining('claude-sonnet-5'), findsOneWidget);
+
+    final modelPicker = find.byType(DropdownButtonFormField<String>).last;
+    await tester.ensureVisible(modelPicker);
+    await tester.tap(modelPicker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('claude-sonnet-5').last);
+    await tester.pumpAndSettle();
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('provider.model.anthropic'), 'claude-sonnet-5');
   });
 
   testWidgets('a rejected key gets an explanation and a remedy',

@@ -298,6 +298,10 @@ Future<ConnectionResult> _geminiTest(
     final models = list is List
         ? list
             .whereType<Map<String, dynamic>>()
+            .where((m) =>
+                (m['supportedGenerationMethods'] as List?)
+                    ?.contains('generateContent') ??
+                false)
             .map((m) =>
                 (m['name'] as Object?).toString().replaceFirst('models/', ''))
             .toList()
@@ -309,6 +313,7 @@ Future<ConnectionResult> _geminiTest(
         summary: 'Connected, but $expectedModel is not available to this key',
         detail: 'Available: ${models.take(6).join(', ')}',
         remedy: 'Pick one of the listed models in settings.',
+        models: models,
       );
     }
 

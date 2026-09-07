@@ -128,7 +128,18 @@ class RecordingController extends StateNotifier<RecordState> {
       adapter.source.segments.listen((segment) {
         _liveText = '$_liveText ${segment.text}'.trim();
       });
-      await adapter.startListening();
+      try {
+        await adapter.startListening();
+      } catch (e) {
+        _live = null;
+        await _teardown();
+        await _recorder.cancel();
+        state = RecordError(
+          'On-device speech recognition could not start.',
+          remedy: e.toString(),
+        );
+        return;
+      }
     }
 
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
@@ -168,7 +179,8 @@ class RecordingController extends StateNotifier<RecordState> {
         _paused = false;
         final open = _windows.lastIndexWhere((w) => w.isOpen);
         if (open >= 0) {
-          _windows[open] = _windows[open].closedAt(_recorder.elapsed.inMilliseconds);
+          _windows[open] =
+              _windows[open].closedAt(_recorder.elapsed.inMilliseconds);
         }
         await _recorder.resume();
       case InterruptionAction.finalize:
@@ -182,7 +194,8 @@ class RecordingController extends StateNotifier<RecordState> {
   void _closeOpenWindow() {
     final open = _windows.lastIndexWhere((w) => w.isOpen);
     if (open >= 0) {
-      _windows[open] = _windows[open].closedAt(_recorder.elapsed.inMilliseconds);
+      _windows[open] =
+          _windows[open].closedAt(_recorder.elapsed.inMilliseconds);
     }
   }
 
@@ -275,7 +288,8 @@ class RecordingController extends StateNotifier<RecordState> {
     }
   }
 
-  DurableRecordingPipeline _pipelineFor(_Providers providers, String audioPath) =>
+  DurableRecordingPipeline _pipelineFor(
+          _Providers providers, String audioPath) =>
       DurableRecordingPipeline(
         queue: ChunkQueue(
           store: DriftChunkStore(_db),
@@ -285,13 +299,15 @@ class RecordingController extends StateNotifier<RecordState> {
         structuring: StructuringPipeline(provider: providers.structuring),
       );
 
-  Future<void> _consume(Stream<PipelineEvent> events, String recordingId) async {
+  Future<void> _consume(
+      Stream<PipelineEvent> events, String recordingId) async {
     await for (final event in events) {
       switch (event) {
         case TranscribingChunk(:final completed, :final total):
           state = RecordProcessing(
-            label:
-                total <= 1 ? 'Transcribing' : 'Transcribing $completed of $total',
+            label: total <= 1
+                ? 'Transcribing'
+                : 'Transcribing $completed of $total',
             fraction: event.fraction,
           );
         case ChunkFailed():
@@ -310,16 +326,21 @@ class RecordingController extends StateNotifier<RecordState> {
             recordingId,
             warning: warning.isEmpty ? null : warning.join(' · '),
           );
-        case PipelineFailed(:final transcript):
+        case PipelineFailed(:final transcript, :final error):
           await _repository.saveTranscript(recordingId, transcript);
           state = RecordError(
             'The notes could not be written.',
-            remedy: 'Your recording and transcript are saved. Try again, or switch to '
-                'a different service in Settings.',
+            remedy: _pipelineFailureRemedy(error),
             recordingId: recordingId,
           );
       }
     }
+  }
+
+  static String _pipelineFailureRemedy(Object error) {
+    final detail = error.toString();
+    return 'Your recording and transcript are saved. Try again, or switch to a '
+        'different service in Settings.\n\n$detail';
   }
 
   Future<_Providers?> _resolveProviders(TranscriptionProvider? live) async {
@@ -327,7 +348,8 @@ class RecordingController extends StateNotifier<RecordState> {
     if (structuringKind == null) {
       state = const RecordError(
         'No note-writing service is set up yet.',
-        remedy: 'Choose one in Settings — a model on your own machine works without '
+        remedy:
+            'Choose one in Settings — a model on your own machine works without '
             'a key.',
       );
       return null;

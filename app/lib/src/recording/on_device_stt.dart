@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:transcript_core/transcript_core.dart';
@@ -65,7 +66,8 @@ class OnDeviceSpeechSource extends LiveTranscriptionSource {
     if (!available) {
       return ConnectionResult.failure(
         summary: 'Speech recognition is unavailable on this device',
-        remedy: 'Check that dictation is enabled in system settings, or choose a '
+        remedy:
+            'Check that dictation is enabled in system settings, or choose a '
             'cloud provider instead.',
       );
     }
@@ -135,10 +137,14 @@ class OnDeviceSpeechSource extends LiveTranscriptionSource {
     }
   }
 
-  void _onError(Object error) {
+  void _onError(SpeechRecognitionError error) {
     // A no-match error just means nobody spoke during that session; restarting is the
     // correct response, not surfacing an error to the user mid-meeting.
     if (_stopping) return;
+    if (error.permanent) {
+      _stopping = true;
+      return;
+    }
     unawaited(_listen(null));
   }
 

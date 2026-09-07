@@ -86,6 +86,7 @@ class AnthropicStructuringProvider extends StructuringProvider {
           summary: 'Connected, but $model is not available to this key',
           detail: 'Available: ${models.take(6).join(', ')}',
           remedy: 'Pick one of the listed models in settings.',
+          models: models,
         );
       }
 

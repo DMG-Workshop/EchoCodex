@@ -107,10 +107,11 @@ enum ProviderKind {
 
   static List<ProviderKind> forStage(ProviderStage stage) => switch (stage) {
         // Whisper (offline), OpenAI Whisper and Gemini audio are still real adapters
-        // underneath, but on-device recognition is the only one offered here: it needs
-        // no key, no download and no network, so it is the one choice a fresh install
-        // can just use.
-        ProviderStage.transcription => const [onDeviceStt],
+          // underneath. On-device recognition remains first so a fresh install can work
+          // without a key, a download, or a network connection.
+          ProviderStage.transcription => values
+              .where((k) => k.stages.contains(stage))
+              .toList(),
         ProviderStage.structuring =>
           values.where((k) => k.stages.contains(stage)).toList(),
       };
