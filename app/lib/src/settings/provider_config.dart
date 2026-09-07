@@ -107,11 +107,10 @@ enum ProviderKind {
 
   static List<ProviderKind> forStage(ProviderStage stage) => switch (stage) {
         // Whisper (offline), OpenAI Whisper and Gemini audio are still real adapters
-          // underneath. On-device recognition remains first so a fresh install can work
-          // without a key, a download, or a network connection.
-          ProviderStage.transcription => values
-              .where((k) => k.stages.contains(stage))
-              .toList(),
+        // underneath. On-device recognition remains first so a fresh install can work
+        // without a key, a download, or a network connection.
+        ProviderStage.transcription =>
+          values.where((k) => k.stages.contains(stage)).toList(),
         ProviderStage.structuring =>
           values.where((k) => k.stages.contains(stage)).toList(),
       };
@@ -294,6 +293,7 @@ class SettingsStore {
   static const _kEndpointPrefix = 'provider.endpoint.';
   static const _kOnboarded = 'onboarding.completed';
   static const _kRecordingsDir = 'recordings.dirPath';
+  static const _kWorkflowPrefix = 'workflow.';
 
   /// A folder the user picked instead of the app's own storage, or null for the
   /// default. New recordings go here; recordings already saved elsewhere are not moved.
@@ -336,6 +336,35 @@ class SettingsStore {
       _prefs.getString('$_kEndpointPrefix${kind.id}');
   Future<void> setEndpoint(ProviderKind kind, String endpoint) =>
       _prefs.setString('$_kEndpointPrefix${kind.id}', endpoint);
+
+  bool workflowEnabled(String key, {bool defaultValue = true}) =>
+      _prefs.getBool('$_kWorkflowPrefix$key') ?? defaultValue;
+
+  Future<void> setWorkflowEnabled(String key, bool enabled) =>
+      _prefs.setBool('$_kWorkflowPrefix$key', enabled);
+
+  String get transcriptionLanguage =>
+      _prefs.getString('${_kWorkflowPrefix}language') ?? 'en-US';
+
+  Future<void> setTranscriptionLanguage(String language) =>
+      _prefs.setString('${_kWorkflowPrefix}language', language.trim());
+
+  String get customVocabulary =>
+      _prefs.getString('${_kWorkflowPrefix}vocabulary') ?? '';
+
+  Future<void> setCustomVocabulary(String vocabulary) =>
+      _prefs.setString('${_kWorkflowPrefix}vocabulary', vocabulary.trim());
+
+  int get flashcardLimit =>
+      _prefs.getInt('${_kWorkflowPrefix}flashcardLimit') ?? 20;
+
+  Future<void> setFlashcardLimit(int limit) =>
+      _prefs.setInt('${_kWorkflowPrefix}flashcardLimit', limit.clamp(0, 20));
+
+  int get quizLimit => _prefs.getInt('${_kWorkflowPrefix}quizLimit') ?? 20;
+
+  Future<void> setQuizLimit(int limit) =>
+      _prefs.setInt('${_kWorkflowPrefix}quizLimit', limit.clamp(0, 20));
 
   /// The default pairing: nothing configured, nothing to pay for. On-device recognition
   /// needs no key, and a local model needs no key — so the app has something to do

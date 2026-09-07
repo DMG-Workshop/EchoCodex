@@ -129,7 +129,7 @@ class RecordingController extends StateNotifier<RecordState> {
         _liveText = '$_liveText ${segment.text}'.trim();
       });
       try {
-        await adapter.startListening();
+        await adapter.startListening(languageHint: _languageHint);
       } catch (e) {
         _live = null;
         await _teardown();
@@ -251,6 +251,9 @@ class RecordingController extends StateNotifier<RecordState> {
         silences: captured.silences,
         referenceDate: _isoDate(DateTime.now()),
         timeZone: DateTime.now().timeZoneName,
+        userContext: _settings.customVocabulary.isEmpty
+            ? null
+            : 'Custom vocabulary: ${_settings.customVocabulary}',
         additionalGaps: interruptionGaps,
       ),
       recordingId,
@@ -295,9 +298,14 @@ class RecordingController extends StateNotifier<RecordState> {
           store: DriftChunkStore(_db),
           transcription: providers.transcription,
           audio: WavChunkReader(File(audioPath)),
+          languageHint: _languageHint,
         ),
         structuring: StructuringPipeline(provider: providers.structuring),
       );
+
+  String? get _languageHint => _settings.workflowEnabled('multiLanguage')
+      ? _settings.transcriptionLanguage
+      : null;
 
   Future<void> _consume(
       Stream<PipelineEvent> events, String recordingId) async {

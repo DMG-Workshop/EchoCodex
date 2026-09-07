@@ -12,6 +12,7 @@ import 'connection_test_controller.dart';
 import 'local_discovery_sheet.dart';
 import 'provider_config.dart';
 import 'secure_key_store.dart';
+import 'workflow_settings_screen.dart';
 
 /// Where the two provider slots are chosen and proven.
 ///
@@ -80,6 +81,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onChanged: _onChanged),
           const Divider(height: 32),
           _RecordingsLocationTile(onChanged: _onChanged),
+          const Divider(height: 32),
+          ListTile(
+            leading: const Icon(Icons.tune),
+            title: const Text('Workflow features'),
+            subtitle: const Text(
+              'Meetings, speakers, imports, languages, history, and study aids',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                  builder: (_) => const WorkflowSettingsScreen()),
+            ),
+          ),
           const Divider(height: 32),
           ListTile(
             leading: const Icon(Icons.lock_outline),

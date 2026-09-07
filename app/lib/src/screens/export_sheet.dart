@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import 'package:transcript_core/transcript_core.dart';
 
@@ -16,21 +18,37 @@ enum ExportFormat {
     extension: 'md',
     mime: 'text/markdown',
   ),
+  pdf(
+    label: 'PDF',
+    detail: 'A paginated, shareable document.',
+    extension: 'pdf',
+    mime: 'application/pdf',
+  ),
+  docx(
+    label: 'DOCX',
+    detail: 'An editable Microsoft Word document.',
+    extension: 'docx',
+    mime:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ),
   csv(
     label: 'Spreadsheet (CSV)',
-    detail: 'One row per action item, with a column saying how each date was known.',
+    detail:
+        'One row per action item, with a column saying how each date was known.',
     extension: 'csv',
     mime: 'text/csv',
   ),
   jira(
     label: 'Jira CSV',
-    detail: 'Ready for Jira\'s importer. Only spoken dates fill the due-date field.',
+    detail:
+        'Ready for Jira\'s importer. Only spoken dates fill the due-date field.',
     extension: 'csv',
     mime: 'text/csv',
   ),
   calendar(
     label: 'Calendar (.ics)',
-    detail: 'Dated tasks and milestones. Undated work is left out rather than guessed.',
+    detail:
+        'Dated tasks and milestones. Undated work is left out rather than guessed.',
     extension: 'ics',
     mime: 'text/calendar',
   );
@@ -49,6 +67,9 @@ enum ExportFormat {
 
   String render(NoteDocument note, {String? recordedOn}) => switch (this) {
         ExportFormat.markdown =>
+          NoteExporters.markdown(note, recordedOn: recordedOn),
+        ExportFormat.pdf ||
+        ExportFormat.docx =>
           NoteExporters.markdown(note, recordedOn: recordedOn),
         ExportFormat.csv => NoteExporters.tasksCsv(note),
         ExportFormat.jira => NoteExporters.jiraCsv(note),
@@ -153,13 +174,69 @@ class ExportSheet extends StatelessWidget {
     final dir = await getTemporaryDirectory();
     final name = '${_slug(note.meta.title)}.${format.extension}';
     final file = File(p.join(dir.path, name));
-    // Written as UTF-8 explicitly: transcripts carry names and terms that are not ASCII,
-    // and a spreadsheet opening them as Latin-1 turns those into mojibake.
-    await file.writeAsBytes(
-      utf8.encode(format.render(note, recordedOn: recordedOn)),
-    );
+    final bytes = switch (format) {
+      ExportFormat.pdf => await _pdfBytes(),
+      ExportFormat.docx => _docxBytes(),
+      _ => utf8.encode(format.render(note, recordedOn: recordedOn)),
+    };
+    await file.writeAsBytes(bytes);
     return file;
   }
+
+  Future<List<int>> _pdfBytes() async {
+    final document = pw.Document(title: note.meta.title);
+    final lines =
+        NoteExporters.markdown(note, recordedOn: recordedOn).split('\n');
+    document.addPage(pw.MultiPage(
+      build: (_) => [
+        for (final line in lines)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 4),
+            child: pw.Text(line.isEmpty ? ' ' : line),
+          ),
+      ],
+    ));
+    return document.save();
+  }
+
+  List<int> _docxBytes() {
+    final archive = Archive()
+      ..addFile(ArchiveFile.string('[Content_Types].xml', _contentTypes))
+      ..addFile(ArchiveFile.string('_rels/.rels', _rootRelationships))
+      ..addFile(ArchiveFile.string('word/document.xml', _documentXml()))
+      ..addFile(ArchiveFile.string(
+          'word/_rels/document.xml.rels', _documentRelationships));
+    return ZipEncoder().encodeBytes(archive);
+  }
+
+  String _documentXml() {
+    final paragraphs = NoteExporters.markdown(note, recordedOn: recordedOn)
+        .split('\n')
+        .map((line) =>
+            '<w:p><w:r><w:t xml:space="preserve">${_xml(line.isEmpty ? ' ' : line)}</w:t></w:r></w:p>')
+        .join();
+    return '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>$paragraphs<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>''';
+  }
+
+  static String _xml(String value) => value
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&apos;');
+
+  static const _contentTypes =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>''';
+
+  static const _rootRelationships =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>''';
+
+  static const _documentRelationships =
+      '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>''';
 
   static String _slug(String title) {
     final slug = title
