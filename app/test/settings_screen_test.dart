@@ -218,6 +218,41 @@ void main() {
         reason: 'the key is never left sitting in a visible field');
   });
 
+  testWidgets('Save persists a typed key without needing a connection test',
+      (tester) async {
+    final store = InMemoryKeyStore();
+    await pumpSettings(tester, [], keys: store);
+
+    await tester.enterText(
+        find.widgetWithText(TextField, 'API key'), 'sk-not-yet-tested');
+    await tester.ensureVisible(find.text('Save'));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(await store.read('anthropic'), 'sk-not-yet-tested',
+        reason: 'the key field only autosaves via Test connection otherwise');
+    expect(find.text('Settings saved'), findsOneWidget);
+    final field = tester.widget<TextField>(find.byType(TextField).last);
+    expect(field.controller?.text, isEmpty,
+        reason: 'the key is never left sitting in a visible field');
+  });
+
+  testWidgets('Save does not disturb a choice already made', (tester) async {
+    final store = InMemoryKeyStore();
+    await pumpSettings(tester, [], keys: store);
+
+    await tester.ensureVisible(find.text('Ollama'));
+    await tester.tap(find.text('Ollama'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings saved'), findsOneWidget);
+    expect(find.text('Ollama'), findsOneWidget,
+        reason: 'an explicit save must not revert an autosaved choice');
+  });
+
   testWidgets('the header states what happens to a recording', (tester) async {
     // Default is on-device recognition; nothing is chosen for structuring yet, so the
     // app must not claim to be private before it has earned it.
