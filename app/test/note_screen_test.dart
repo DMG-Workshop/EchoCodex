@@ -117,6 +117,40 @@ void main() {
     expect(find.text('“we need to get off the legacy session store”'), findsOneWidget);
   });
 
+  testWidgets('a stored transcript is shown directly, cleaned by default',
+      (tester) async {
+    await pumpNote(
+      tester,
+      recordingRow(
+        transcriptText: 'um so we need to ship it',
+        cleanedTranscriptText: 'So we need to ship it.',
+      ),
+    );
+    await tester.tap(find.text('Transcript'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('So we need to ship it.'), findsOneWidget);
+    expect(find.text('um so we need to ship it'), findsNothing);
+
+    await tester.tap(find.text('Raw'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('um so we need to ship it'), findsOneWidget);
+    expect(find.text('So we need to ship it.'), findsNothing);
+  });
+
+  testWidgets('a raw-only transcript has no cleaned/raw toggle', (tester) async {
+    await pumpNote(
+      tester,
+      recordingRow(transcriptText: 'hello there'),
+    );
+    await tester.tap(find.text('Transcript'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('hello there'), findsOneWidget);
+    expect(find.text('Raw'), findsNothing);
+  });
+
   testWidgets('shows which services made the note and what it cost', (tester) async {
     await pumpNote(tester, recordingRow());
     await tester.dragUntilVisible(

@@ -92,7 +92,13 @@ Map<String, dynamic> noteJson() => {
       'timelineAnchors': [],
     };
 
-db.Recording recordingRow({bool structured = true, String? overrideNote}) =>
+db.Recording recordingRow({
+  bool structured = true,
+  String? overrideNote,
+  String? transcriptText,
+  String? cleanedTranscriptText,
+  bool priority = false,
+}) =>
     db.Recording(
       id: 'r_1',
       title: 'Auth migration kickoff',
@@ -107,6 +113,9 @@ db.Recording recordingRow({bool structured = true, String? overrideNote}) =>
       promptVersion: 'structuring/2026-09-05',
       inputTokens: 1840,
       outputTokens: 610,
+      transcriptText: transcriptText,
+      cleanedTranscriptText: cleanedTranscriptText,
+      priority: priority,
     );
 
 /// A [RecordingRepository] stand-in for widget tests that need real delete behaviour
@@ -157,8 +166,21 @@ class FakeRecordingRepository implements RecordingRepository {
       throw UnimplementedError();
 
   @override
-  Future<void> saveTranscript(String recordingId, Transcript transcript) =>
+  Future<void> saveTranscript(
+    String recordingId,
+    Transcript transcript, {
+    String? cleaned,
+  }) =>
       throw UnimplementedError();
+
+  @override
+  Future<void> setPriority(String recordingId, bool priority) async {
+    _rows = [
+      for (final r in _rows)
+        if (r.id == recordingId) r.copyWith(priority: priority) else r,
+    ];
+    _controller.add(List.unmodifiable(_rows));
+  }
 
   @override
   Future<void> saveNote(String recordingId, StructureOutcome outcome) =>

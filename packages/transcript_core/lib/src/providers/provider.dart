@@ -67,6 +67,7 @@ class TranscribeRequest {
     this.offsetMs = 0,
     this.languageHint,
     this.primingPrompt,
+    this.speakerLabels = false,
   });
 
   final List<int> audio;
@@ -81,6 +82,12 @@ class TranscribeRequest {
   /// Tail of the previous chunk's transcript. Keeps proper nouns and technical vocabulary
   /// spelled consistently across chunk seams.
   final String? primingPrompt;
+
+  /// Ask the provider to label speaker turns (`TranscriptSegment.speaker`) where it is
+  /// able to. Only a provider that takes the audio itself and reasons over it — Gemini
+  /// here — can attempt this; a dedicated ASR endpoint such as Whisper has no notion of
+  /// "who" and ignores the flag.
+  final bool speakerLabels;
 }
 
 abstract class TranscriptionProvider extends AiProvider {

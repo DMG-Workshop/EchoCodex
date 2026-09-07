@@ -44,9 +44,12 @@ class _WorkflowSettingsScreenState
         children: [
           const _SectionHeader('Capture and transcription'),
           _toggle(store, 'speakerLabels', 'Speaker labels',
-              'Keep diarization labels such as Speaker 1 in the transcript.'),
+              'Best-effort "Speaker 1" style labels. Only takes effect when Gemini '
+                  '(audio) is your transcription provider — no other service here can '
+                  'tell voices apart.'),
           _toggle(store, 'priorityQueue', 'Priority transcription queue',
-              'Process urgent recordings before the rest of the queue.'),
+              'Recordings marked urgent in the library are transcribed before the '
+                  'rest of the backlog on next launch.'),
           _toggle(store, 'punctuationCleanup', 'Punctuation and filler cleanup',
               'Remove filler while preserving the meaning and your words.'),
           _toggle(store, 'multiLanguage', 'Multi-language transcription',

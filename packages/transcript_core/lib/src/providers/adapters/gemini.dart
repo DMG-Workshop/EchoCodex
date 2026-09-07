@@ -173,11 +173,20 @@ class GeminiTranscriptionProvider extends TranscriptionProvider {
     // other model output.
     final instruction = StringBuffer()
       ..writeln('Transcribe this audio verbatim.')
-      ..writeln(
-          'Return JSON: {"segments":[{"startMs":int,"endMs":int,"text":string}]}.')
+      ..writeln(request.speakerLabels
+          ? 'Return JSON: {"segments":[{"startMs":int,"endMs":int,"text":string,'
+              '"speaker":string}]}.'
+          : 'Return JSON: {"segments":[{"startMs":int,"endMs":int,"text":string}]}.')
       ..writeln('Offsets are milliseconds from the start of THIS audio clip.')
       ..writeln(
           'Do not summarize, correct grammar, or omit filler. Transcribe only.');
+    if (request.speakerLabels) {
+      instruction.writeln(
+          'Label who is speaking in "speaker" using generic labels such as '
+          '"Speaker 1", "Speaker 2" — a name only if someone is addressed by it aloud. '
+          'Keep the same label for the same voice across the whole clip. If you cannot '
+          'tell voices apart, use "Speaker 1" for all of it rather than guessing.');
+    }
     if (request.primingPrompt case final priming? when priming.isNotEmpty) {
       instruction.writeln(
           'Context from the preceding audio, for consistent spelling of names and '
@@ -206,7 +215,12 @@ class GeminiTranscriptionProvider extends TranscriptionProvider {
         ],
         'generationConfig': {
           'responseMimeType': 'application/json',
-          'responseSchema': renderSchema(_segmentsSchema, SchemaDialect.gemini),
+          'responseSchema': renderSchema(
+            request.speakerLabels
+                ? _segmentsSchemaWithSpeaker
+                : _segmentsSchema,
+            SchemaDialect.gemini,
+          ),
         },
       },
     ));
@@ -243,10 +257,12 @@ class GeminiTranscriptionProvider extends TranscriptionProvider {
     return segments.whereType<Map<String, dynamic>>().map((s) {
       final start = (s['startMs'] as num?)?.round() ?? 0;
       final end = (s['endMs'] as num?)?.round() ?? start;
+      final speaker = (s['speaker'] as String?)?.trim();
       return TranscriptSegment(
         startMs: start + request.offsetMs,
         endMs: end + request.offsetMs,
         text: (s['text'] ?? '').toString().trim(),
+        speaker: speaker == null || speaker.isEmpty ? null : speaker,
       );
     }).toList();
   }
@@ -267,6 +283,28 @@ const Map<String, dynamic> _segmentsSchema = {
           'startMs': {'type': 'integer'},
           'endMs': {'type': 'integer'},
           'text': {'type': 'string'},
+        },
+      },
+    },
+  },
+};
+
+const Map<String, dynamic> _segmentsSchemaWithSpeaker = {
+  'type': 'object',
+  'additionalProperties': false,
+  'required': ['segments'],
+  'properties': {
+    'segments': {
+      'type': 'array',
+      'items': {
+        'type': 'object',
+        'additionalProperties': false,
+        'required': ['startMs', 'endMs', 'text', 'speaker'],
+        'properties': {
+          'startMs': {'type': 'integer'},
+          'endMs': {'type': 'integer'},
+          'text': {'type': 'string'},
+          'speaker': {'type': 'string'},
         },
       },
     },

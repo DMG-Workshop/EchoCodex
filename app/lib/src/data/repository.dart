@@ -36,13 +36,29 @@ class RecordingRepository {
   }
 
   /// Saves the transcript on its own. Called before structuring is attempted.
-  Future<void> saveTranscript(String recordingId, Transcript transcript) =>
+  ///
+  /// [cleaned] is the same transcript with filler and stutters removed, computed by the
+  /// caller only when the punctuation and filler cleanup workflow feature is on — the
+  /// raw text is always kept alongside it, never replaced.
+  Future<void> saveTranscript(
+    String recordingId,
+    Transcript transcript, {
+    String? cleaned,
+  }) =>
       (_db.update(_db.recordings)..where((r) => r.id.equals(recordingId))).write(
         RecordingsCompanion(
           title: Value(_provisionalTitle(transcript)),
+          transcriptText: Value(transcript.plainText),
+          cleanedTranscriptText: Value(cleaned),
           noteJson: const Value.absent(),
         ),
       );
+
+  /// Marks or unmarks a recording as urgent, so it is transcribed before the rest of the
+  /// backlog on the next launch — see the priority transcription queue workflow feature.
+  Future<void> setPriority(String recordingId, bool priority) =>
+      (_db.update(_db.recordings)..where((r) => r.id.equals(recordingId)))
+          .write(RecordingsCompanion(priority: Value(priority)));
 
   Future<void> saveNote(String recordingId, StructureOutcome outcome) =>
       (_db.update(_db.recordings)..where((r) => r.id.equals(recordingId))).write(

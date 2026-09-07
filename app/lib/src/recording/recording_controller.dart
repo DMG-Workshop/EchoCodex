@@ -241,7 +241,11 @@ class RecordingController extends StateNotifier<RecordState> {
     );
 
     if (liveTranscript != null) {
-      await _repository.saveTranscript(recordingId, liveTranscript);
+      await _repository.saveTranscript(
+        recordingId,
+        liveTranscript,
+        cleaned: _cleanedTranscript(liveTranscript),
+      );
     }
 
     await _consume(
@@ -299,6 +303,7 @@ class RecordingController extends StateNotifier<RecordState> {
           transcription: providers.transcription,
           audio: WavChunkReader(File(audioPath)),
           languageHint: _languageHint,
+          speakerLabels: _settings.workflowEnabled('speakerLabels'),
         ),
         structuring: StructuringPipeline(provider: providers.structuring),
       );
@@ -306,6 +311,13 @@ class RecordingController extends StateNotifier<RecordState> {
   String? get _languageHint => _settings.workflowEnabled('multiLanguage')
       ? _settings.transcriptionLanguage
       : null;
+
+  /// The cleaned transcript to store alongside the raw one, or null when the
+  /// punctuation and filler cleanup workflow feature is off.
+  String? _cleanedTranscript(Transcript transcript) =>
+      _settings.workflowEnabled('punctuationCleanup')
+          ? TranscriptCleaner.clean(transcript.plainText)
+          : null;
 
   Future<void> _consume(
       Stream<PipelineEvent> events, String recordingId) async {
@@ -323,7 +335,11 @@ class RecordingController extends StateNotifier<RecordState> {
         case Structuring():
           state = const RecordProcessing(label: 'Writing notes');
         case PipelineComplete(:final transcript, :final outcome):
-          await _repository.saveTranscript(recordingId, transcript);
+          await _repository.saveTranscript(
+            recordingId,
+            transcript,
+            cleaned: _cleanedTranscript(transcript),
+          );
           await _repository.saveNote(recordingId, outcome);
           final structuringWarning = _warningFor(transcript, outcome);
           final warning = [
@@ -335,7 +351,11 @@ class RecordingController extends StateNotifier<RecordState> {
             warning: warning.isEmpty ? null : warning.join(' · '),
           );
         case PipelineFailed(:final transcript, :final error):
-          await _repository.saveTranscript(recordingId, transcript);
+          await _repository.saveTranscript(
+            recordingId,
+            transcript,
+            cleaned: _cleanedTranscript(transcript),
+          );
           state = RecordError(
             'The notes could not be written.',
             remedy: _pipelineFailureRemedy(error),

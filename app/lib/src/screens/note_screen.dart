@@ -125,7 +125,7 @@ class _NoteView extends ConsumerWidget {
                 _NotesTab(note: note, recording: recording),
                 BoardView(recordingId: recording.id, note: note),
                 TimelineView(recordingId: recording.id, note: note),
-                _TranscriptTab(note: note),
+                _TranscriptTab(note: note, recording: recording),
               ]),
       ),
     );
@@ -231,16 +231,72 @@ class _NotesTab extends StatelessWidget {
   }
 }
 
-class _TranscriptTab extends StatelessWidget {
-  const _TranscriptTab({required this.note});
+class _TranscriptTab extends StatefulWidget {
+  const _TranscriptTab({required this.note, required this.recording});
+
+  final NoteDocument note;
+  final db.Recording recording;
+
+  @override
+  State<_TranscriptTab> createState() => _TranscriptTabState();
+}
+
+class _TranscriptTabState extends State<_TranscriptTab> {
+  bool _showRaw = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final raw = widget.recording.transcriptText;
+    final cleaned = widget.recording.cleanedTranscriptText;
+
+    if (raw == null && cleaned == null) {
+      return _CitedTranscript(note: widget.note);
+    }
+
+    final showingRaw = _showRaw || cleaned == null;
+    final text = (showingRaw ? raw : cleaned) ?? raw ?? '';
+
+    return Column(
+      children: [
+        if (cleaned != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Cleaned')),
+                  ButtonSegment(value: true, label: Text('Raw')),
+                ],
+                selected: {showingRaw},
+                onSelectionChanged: (s) =>
+                    setState(() => _showRaw = s.first),
+              ),
+            ),
+          ),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+            child: SelectableText(text.isEmpty ? 'No transcript was stored.' : text,
+                style: theme.textTheme.bodyMedium),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The pre-Phase-2 reading view: what could be reconstructed from the note's cited
+/// spans, for a recording made before the full transcript was stored alongside it.
+class _CitedTranscript extends StatelessWidget {
+  const _CitedTranscript({required this.note});
 
   final NoteDocument note;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Phase 1 reconstructs the reading view from the cited spans. Phase 2 stores the
-    // full transcript alongside the note and plays it back in sync with the audio.
     final refs = [
       ...note.sections.map((s) => (s.sourceRef, s.heading)),
       ...note.decisions.map((d) => (d.sourceRef, d.statement)),

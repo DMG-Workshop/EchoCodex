@@ -327,6 +327,68 @@ void main() {
       expect(inline['data'], base64Encode([72, 105]));
       expect(segments.single.startMs, 1000, reason: 'offset applied');
     });
+
+    test('asks for and parses speaker labels when requested', () async {
+      final transport = RecordingTransport.single(HttpReply(
+        200,
+        jsonEncode({
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {
+                    'text': '{"segments":[{"startMs":0,"endMs":900,'
+                        '"text":"Hi","speaker":"Speaker 1"}]}'
+                  }
+                ]
+              }
+            }
+          ],
+        }),
+      ));
+
+      final segments =
+          await GeminiTranscriptionProvider(transport: transport, apiKey: 'g')
+              .transcribe(const TranscribeRequest(
+        audio: [72, 105],
+        mimeType: 'audio/wav',
+        speakerLabels: true,
+      ));
+
+      expect(segments.single.speaker, 'Speaker 1');
+      final instruction = ((transport.lastCall.jsonBodyMap['contents'] as List)
+          .first as Map)['parts'] as List;
+      expect((instruction.first as Map)['text'], contains('speaker'));
+    });
+
+    test('leaves speaker null when not requested', () async {
+      final transport = RecordingTransport.single(HttpReply(
+        200,
+        jsonEncode({
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {
+                    'text':
+                        '{"segments":[{"startMs":0,"endMs":900,"text":"Hi"}]}'
+                  }
+                ]
+              }
+            }
+          ],
+        }),
+      ));
+
+      final segments =
+          await GeminiTranscriptionProvider(transport: transport, apiKey: 'g')
+              .transcribe(const TranscribeRequest(
+        audio: [72, 105],
+        mimeType: 'audio/wav',
+      ));
+
+      expect(segments.single.speaker, isNull);
+    });
   });
 
   group('local models', () {
