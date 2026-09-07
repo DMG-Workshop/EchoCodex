@@ -5,6 +5,7 @@
 /// without a device, a network, or an API key.
 library;
 
+export 'src/audio/audio_import.dart';
 export 'src/audio/wav.dart';
 export 'src/cost/pricing.dart';
 export 'src/discovery/local_discovery.dart';

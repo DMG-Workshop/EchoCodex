@@ -162,6 +162,7 @@ class FakeRecordingRepository implements RecordingRepository {
     required Duration duration,
     required String transcriptionProviderId,
     required String structuringProviderId,
+    String? title,
   }) =>
       throw UnimplementedError();
 

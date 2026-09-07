@@ -8,6 +8,7 @@ import '../data/chunk_store.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
 import '../settings/provider_config.dart';
+import 'audio_import.dart';
 import 'background_audio.dart';
 import 'interruption_policy.dart';
 import 'on_device_stt.dart';
@@ -67,6 +68,7 @@ class RecordingController extends StateNotifier<RecordState> {
     required SettingsStore settings,
     required TranscriptDatabase database,
     required BackgroundAudio background,
+    AudioImportService importer = const AudioImportService(),
     this.interruptions = const InterruptionPolicy(),
   })  : _recorder = recorder,
         _repository = repository,
@@ -74,6 +76,7 @@ class RecordingController extends StateNotifier<RecordState> {
         _settings = settings,
         _db = database,
         _background = background,
+        _importer = importer,
         super(const RecordIdle());
 
   final RecorderService _recorder;
@@ -82,6 +85,7 @@ class RecordingController extends StateNotifier<RecordState> {
   final SettingsStore _settings;
   final TranscriptDatabase _db;
   final BackgroundAudio _background;
+  final AudioImportService _importer;
   final InterruptionPolicy interruptions;
 
   LiveTranscriptionAdapter? _live;
@@ -259,6 +263,91 @@ class RecordingController extends StateNotifier<RecordState> {
             ? null
             : 'Custom vocabulary: ${_settings.customVocabulary}',
         additionalGaps: interruptionGaps,
+        keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
+        flashcardLimit: _flashcardLimit,
+        quizLimit: _quizLimit,
+      ),
+      recordingId,
+    );
+  }
+
+  /// Brings in a file recorded somewhere else — a Zoom or Teams export, a lecture, a
+  /// voice memo — and runs it through the same pipeline a live recording uses.
+  ///
+  /// This is also the honest answer to "record my meetings": no app on either platform
+  /// can capture another app's call audio, but every conferencing tool can export the
+  /// recording afterwards, and that file lands here.
+  Future<void> importRecording(String sourcePath) async {
+    final format = ImportFormat.forPath(sourcePath);
+    if (format == null) {
+      state = RecordError(
+        'That file type cannot be imported.',
+        remedy: 'Supported: ${ImportFormat.values.map((f) => f.label).join(', ')}.',
+      );
+      return;
+    }
+
+    final enabled = format.isVideo
+        ? _settings.workflowEnabled('videoImport')
+        : _settings.workflowEnabled('audioImport');
+    if (!enabled) {
+      state = RecordError(
+        '${format.isVideo ? 'Video' : 'Audio'} import is turned off.',
+        remedy: 'Turn it back on in Settings, under Workflow features.',
+      );
+      return;
+    }
+
+    // On-device recognition listens to the microphone; it cannot be handed a file. Say
+    // so specifically rather than through the generic "nothing configured" branch — the
+    // fix is one setting away, and Whisper offline needs no key either.
+    final transcriptionKind = _settings.kindFor(ProviderStage.transcription) ??
+        SettingsStore.defaultTranscription;
+    if (transcriptionKind == ProviderKind.onDeviceStt) {
+      state = const RecordError(
+        'On-device recognition cannot transcribe a file.',
+        remedy: 'It listens to the microphone as you speak. For imports, choose '
+            'Whisper (offline) in Settings — it also needs no key.',
+      );
+      return;
+    }
+
+    state = const RecordProcessing(label: 'Importing');
+
+    final providers = await _resolveProviders(null);
+    if (providers == null) return; // state already set to an error
+
+    final ImportedAudio imported;
+    try {
+      imported = await _importer.import(
+        sourcePath: sourcePath,
+        recordingsDirPath: _settings.recordingsDirPath,
+      );
+    } on AudioImportException catch (e) {
+      state = RecordError(e.message, remedy: e.remedy);
+      return;
+    }
+
+    final recordingId = await _repository.createRecording(
+      path: imported.path,
+      duration: imported.duration,
+      transcriptionProviderId: providers.transcription.id.value,
+      structuringProviderId: providers.structuring.id.value,
+      title: imported.sourceName,
+    );
+
+    await _consume(
+      _pipelineFor(providers, imported.path).start(
+        recordingId: recordingId,
+        totalDurationMs: imported.duration.inMilliseconds,
+        // An imported file carries no loudness history, so the planner has no silences to
+        // cut on and falls back to its fixed boundaries with overlap.
+        silences: const [],
+        referenceDate: _isoDate(DateTime.now()),
+        timeZone: DateTime.now().timeZoneName,
+        userContext: _settings.customVocabulary.isEmpty
+            ? null
+            : 'Custom vocabulary: ${_settings.customVocabulary}',
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
         flashcardLimit: _flashcardLimit,
         quizLimit: _quizLimit,
