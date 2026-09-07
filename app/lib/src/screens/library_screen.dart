@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../data/database.dart' as db;
 import '../recording/recording_controller.dart';
 import '../settings/settings_screen.dart';
+import 'import_action.dart';
 import 'note_screen.dart';
 import 'record_screen.dart';
 
@@ -34,10 +35,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final searchEnabled =
         ref.watch(settingsStoreProvider).workflowEnabled('searchableHistory');
 
+    final importEnabled = ref.watch(settingsStoreProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recordings'),
         actions: [
+          if (importEnabled.workflowEnabled('audioImport') ||
+              importEnabled.workflowEnabled('videoImport'))
+            IconButton(
+              icon: const Icon(Icons.file_upload_outlined),
+              tooltip: 'Import a recording',
+              onPressed: () => importRecordingFile(context, ref),
+            ),
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: 'AI providers',
@@ -130,7 +140,9 @@ class _EmptyLibrary extends StatelessWidget {
             Text('Nothing recorded yet', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(
-              'Recordings stay on this device.',
+              'Recordings stay on this device. You can also import one made '
+              'elsewhere — a meeting exported from Zoom or Teams, or a lecture.',
+              textAlign: TextAlign.center,
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),

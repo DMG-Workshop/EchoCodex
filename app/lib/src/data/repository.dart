@@ -17,16 +17,20 @@ class RecordingRepository {
 
   final TranscriptDatabase _db;
 
+  /// [title] is set for an imported file, where the file's own name is a better
+  /// placeholder than the empty string until the transcript supplies one.
   Future<String> createRecording({
     required String path,
     required Duration duration,
     required String transcriptionProviderId,
     required String structuringProviderId,
+    String? title,
   }) async {
     final id = 'r_${DateTime.now().microsecondsSinceEpoch}';
     await _db.into(_db.recordings).insert(RecordingsCompanion.insert(
           id: id,
           startedAt: DateTime.now(),
+          title: title == null ? const Value.absent() : Value(title),
           audioPath: Value(path),
           durationMs: Value(duration.inMilliseconds),
           transcriptionProviderId: Value(transcriptionProviderId),

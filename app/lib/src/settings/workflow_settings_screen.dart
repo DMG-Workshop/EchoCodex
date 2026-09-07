@@ -83,14 +83,12 @@ class _WorkflowSettingsScreenState
             ),
           ),
           const _SectionHeader('Meetings and imports'),
-          _toggle(store, 'meetingCapture', 'Meeting and call recordings',
-              'Use the same pipeline for Zoom, Teams, FaceTime, Meet, and calls.'),
           _toggle(store, 'audioImport', 'Import audio',
-              'Import WAV, MP3, M4A, FLAC, OGG, or AAC files.'),
+              'Bring in WAV, MP3, M4A, FLAC, OGG or AAC files — a meeting exported '
+                  'from Zoom or Teams, a lecture, a voice memo.'),
           _toggle(store, 'videoImport', 'Import video',
-              'Extract audio from MP4 and other supported video files.'),
-          _toggle(store, 'dropImport', 'Drop anywhere and Import',
-              'Allow files dropped into the app or handed off by an MCP assistant.'),
+              'Take the audio track out of MP4, M4V and MOV files.'),
+          const _MeetingCaptureNote(),
           const _SectionHeader('History and feedback'),
           _toggle(store, 'searchableHistory', 'Searchable local history',
               'Keep every dictation locally with raw and cleaned transcript text.'),
@@ -119,6 +117,46 @@ class _WorkflowSettingsScreenState
         await store.setWorkflowEnabled(key, value);
         if (mounted) setState(() {});
       },
+    );
+  }
+}
+
+/// Why there is no "record my Zoom call" switch here.
+///
+/// A toggle that cannot work is worse than none: both platforms forbid an app from
+/// capturing another app's call audio, so the honest answer is the microphone or an
+/// import, and the user is owed that answer where they went looking for the feature.
+class _MeetingCaptureNote extends StatelessWidget {
+  const _MeetingCaptureNote();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Recording a Zoom, Teams, Meet or FaceTime call',
+                style: theme.textTheme.titleSmall),
+            const SizedBox(height: 6),
+            Text(
+              'No app can capture another app\'s call audio on iOS or Android — the '
+              'platforms block it, and one that claims otherwise is recording your '
+              'microphone. Two things do work: record the meeting through the '
+              'microphone with it played out loud, or import the recording the '
+              'meeting tool saved afterwards.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

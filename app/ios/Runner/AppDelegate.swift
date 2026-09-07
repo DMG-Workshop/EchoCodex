@@ -12,5 +12,13 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+
+    // Not a pub plugin, so it is not in the generated registrant: the file decoder lives
+    // in the app target because it is the app's own platform channel.
+    if let registrar = engineBridge.pluginRegistry.registrar(
+      forPlugin: "AudioDecoderPlugin")
+    {
+      AudioDecoderPlugin.register(with: registrar)
+    }
   }
 }

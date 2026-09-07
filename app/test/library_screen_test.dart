@@ -15,9 +15,10 @@ void main() {
   Future<void> pumpLibrary(
     WidgetTester tester, {
     List<db.Recording>? rows,
+    Map<String, Object> settings = const {},
   }) async {
     repo = FakeRecordingRepository(rows ?? [recordingRow()]);
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues(settings);
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       ProviderScope(
@@ -59,6 +60,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.bolt), findsOneWidget);
+  });
+
+  testWidgets('import is offered by default', (tester) async {
+    await pumpLibrary(tester);
+    expect(find.byTooltip('Import a recording'), findsOneWidget);
+  });
+
+  testWidgets('turning both import features off removes the action',
+      (tester) async {
+    await pumpLibrary(tester, settings: {
+      'workflow.audioImport': false,
+      'workflow.videoImport': false,
+    });
+
+    expect(find.byTooltip('Import a recording'), findsNothing,
+        reason: 'an action that would only report being disabled is worse than none');
+  });
+
+  testWidgets('video import alone still offers the action', (tester) async {
+    await pumpLibrary(tester, settings: {'workflow.audioImport': false});
+    expect(find.byTooltip('Import a recording'), findsOneWidget);
   });
 
   testWidgets('swiping asks for confirmation before deleting anything',
