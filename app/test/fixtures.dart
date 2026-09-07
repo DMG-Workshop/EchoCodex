@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:transcript_app/src/data/database.dart' as db;
+import 'package:transcript_app/src/data/repository.dart';
+import 'package:transcript_core/transcript_core.dart';
 
 /// A note with one dated task, one undated task, a decision and an unclear-audio flag —
 /// enough to exercise every branch the note screen renders.
@@ -105,3 +108,63 @@ db.Recording recordingRow({bool structured = true, String? overrideNote}) =>
       inputTokens: 1840,
       outputTokens: 610,
     );
+
+/// A [RecordingRepository] stand-in for widget tests that need real delete behaviour
+/// (an item leaving the list, a repeat delete being a no-op) without a real drift
+/// database — a live `watch()` stream left dangling timers that flutter_test's teardown
+/// invariants then tripped over.
+class FakeRecordingRepository implements RecordingRepository {
+  FakeRecordingRepository(List<db.Recording> initial)
+      : _rows = List.of(initial),
+        _controller = StreamController<List<db.Recording>>.broadcast();
+
+  List<db.Recording> _rows;
+  final StreamController<List<db.Recording>> _controller;
+  final List<String> deletedIds = [];
+
+  @override
+  Future<void> delete(String id) async {
+    deletedIds.add(id);
+    _rows = _rows.where((r) => r.id != id).toList();
+    _controller.add(List.unmodifiable(_rows));
+  }
+
+  // A broadcast stream drops any event fired before a listener subscribes, and the
+  // widget subscribes only once it builds — so a plain `_controller.stream` would leave
+  // the provider stuck in `loading` forever. Yielding the current snapshot first, then
+  // forwarding later updates, gives every new subscriber the same behaviour drift's
+  // `watch()` has: an immediate value, then live changes.
+  @override
+  Stream<List<db.Recording>> watchAll() async* {
+    yield List.unmodifiable(_rows);
+    yield* _controller.stream;
+  }
+
+  @override
+  Future<List<db.Recording>> all() async => List.of(_rows);
+
+  @override
+  Future<db.Recording?> byId(String id) async =>
+      _rows.where((r) => r.id == id).firstOrNull;
+
+  @override
+  Future<String> createRecording({
+    required String path,
+    required Duration duration,
+    required String transcriptionProviderId,
+    required String structuringProviderId,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> saveTranscript(String recordingId, Transcript transcript) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> saveNote(String recordingId, StructureOutcome outcome) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> updateNote(String recordingId, NoteDocument document) =>
+      throw UnimplementedError();
+}

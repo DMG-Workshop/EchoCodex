@@ -43,13 +43,43 @@ class NoteScreen extends ConsumerWidget {
   }
 }
 
-class _NoteView extends StatelessWidget {
+class _NoteView extends ConsumerWidget {
   const _NoteView({required this.recording});
 
   final db.Recording recording;
 
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Delete this recording?'),
+            content: const Text(
+                'The audio and its notes are removed from this device. This cannot '
+                'be undone.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Keep'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed || !context.mounted) return;
+
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    await ref.read(repositoryProvider).delete(recording.id);
+    navigator.pop();
+    messenger.showSnackBar(const SnackBar(content: Text('Recording deleted')));
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final note = decodeNote(recording);
 
     return DefaultTabController(
@@ -72,6 +102,11 @@ class _NoteView extends StatelessWidget {
                   recordedOn: DateFormat.yMMMd().format(recording.startedAt),
                 ),
               ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline),
+              tooltip: 'Delete recording',
+              onPressed: () => _confirmDelete(context, ref),
+            ),
           ],
           bottom: const TabBar(
             isScrollable: true,

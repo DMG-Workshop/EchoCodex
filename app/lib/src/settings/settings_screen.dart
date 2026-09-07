@@ -30,7 +30,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   // this to rebuild the posture header from the freshly written store.
   int _revision = 0;
 
+  final _transcriptionSection = GlobalKey<_StageSectionState>();
+  final _structuringSection = GlobalKey<_StageSectionState>();
+
   void _onChanged() => setState(() => _revision++);
+
+  // Everything here autosaves already; this exists so a new user has a plain, explicit
+  // action to press. It also covers the one field that does not autosave on every
+  // keystroke — a pasted API key otherwise commits only when "Test connection" is
+  // pressed, so a key typed and never tested would be silently lost without this.
+  Future<void> _saveAll() async {
+    await _transcriptionSection.currentState?.saveExplicitly();
+    await _structuringSection.currentState?.saveExplicitly();
+    if (!mounted) return;
+    _onChanged();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Settings saved')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -44,10 +61,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           _PostureHeader(posture: settings.posture),
           _StageSection(
-              stage: ProviderStage.transcription, onChanged: _onChanged),
+              key: _transcriptionSection,
+              stage: ProviderStage.transcription,
+              onChanged: _onChanged),
           const Divider(height: 32),
           _StageSection(
-              stage: ProviderStage.structuring, onChanged: _onChanged),
+              key: _structuringSection,
+              stage: ProviderStage.structuring,
+              onChanged: _onChanged),
           const Divider(height: 32),
           ListTile(
             leading: const Icon(Icons.lock_outline),
@@ -62,6 +83,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const SizedBox(height: 32),
         ],
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: FilledButton(
+            onPressed: _saveAll,
+            child: const Text('Save'),
+          ),
+        ),
       ),
     );
   }
@@ -117,7 +147,7 @@ class _PostureHeader extends StatelessWidget {
 }
 
 class _StageSection extends ConsumerStatefulWidget {
-  const _StageSection({required this.stage, required this.onChanged});
+  const _StageSection({super.key, required this.stage, required this.onChanged});
 
   final ProviderStage stage;
 
@@ -141,11 +171,16 @@ class _StageSectionState extends ConsumerState<_StageSection> {
   void initState() {
     super.initState();
     // Restore what was chosen last time, rather than resetting to the first option and
-    // silently discarding a configured provider on every visit.
-    _kind = _store.kindFor(widget.stage) ??
-        (widget.stage == ProviderStage.transcription
+    // silently discarding a configured provider on every visit. A saved kind that is no
+    // longer offered for this stage (for example, a transcription option retired since
+    // it was picked) falls back to the default rather than selecting nothing.
+    final saved = _store.kindFor(widget.stage);
+    final offered = ProviderKind.forStage(widget.stage);
+    _kind = (saved != null && offered.contains(saved))
+        ? saved
+        : (widget.stage == ProviderStage.transcription
             ? SettingsStore.defaultTranscription
-            : ProviderKind.forStage(widget.stage).first);
+            : offered.first);
     _endpointController.text = _store.endpointFor(_kind) ?? '';
     _modelController.text = _store.modelFor(_kind) ?? '';
     _refreshKeyState();
@@ -198,7 +233,10 @@ class _StageSectionState extends ConsumerState<_StageSection> {
     widget.onChanged();
   }
 
-  Future<void> _test() async {
+  /// Writes whatever is in this section right now: a typed key (the one field that does
+  /// not autosave as it's typed), plus the kind/endpoint/model persisted the normal way.
+  /// Used by both "Test connection" and the settings screen's explicit Save button.
+  Future<void> saveExplicitly() async {
     final key = _keyController.text.trim();
     if (key.isNotEmpty) {
       await ref.read(keyStoreProvider).write(_kind.id, key);
@@ -206,6 +244,10 @@ class _StageSectionState extends ConsumerState<_StageSection> {
       await _refreshKeyState();
     }
     await _persist();
+  }
+
+  Future<void> _test() async {
+    await saveExplicitly();
     await ref
         .read(connectionTestProvider(widget.stage).notifier)
         .run(_selection, widget.stage);

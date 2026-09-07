@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -117,8 +119,16 @@ class _RecordingTile extends ConsumerWidget {
             ),
           ) ??
           false,
-      onDismissed: (_) =>
-          ref.read(repositoryProvider).delete(recording.id),
+      onDismissed: (_) {
+        final messenger = ScaffoldMessenger.of(context);
+        unawaited(
+          ref.read(repositoryProvider).delete(recording.id).then((_) {
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Recording deleted')),
+            );
+          }),
+        );
+      },
       child: ListTile(
         title: Text(
           recording.title.isEmpty ? 'Untitled recording' : recording.title,
