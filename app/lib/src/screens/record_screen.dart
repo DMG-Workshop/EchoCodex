@@ -38,6 +38,16 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
     });
   }
 
+  /// Settings has no change stream, so whether the note-writing stage is configured is
+  /// only known to be stale after a trip there — refreshed on return rather than left
+  /// showing what was true before the visit.
+  Future<void> _openSettings(BuildContext context, WidgetRef ref) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+    );
+    ref.invalidate(structuringReadyProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(recordingControllerProvider);
@@ -73,16 +83,21 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: 'AI providers',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
-            ),
+            onPressed: () => _openSettings(context, ref),
           ),
         ],
       ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: RecordBody(state: state, levels: _levels),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (state is RecordIdle || state is RecordDone || state is RecordError)
+                _ConfigureAiBanner(onTap: () => _openSettings(context, ref)),
+              Expanded(child: RecordBody(state: state, levels: _levels)),
+            ],
+          ),
         ),
       ),
       floatingActionButton: switch (state) {
@@ -100,6 +115,63 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
             child: const Icon(Icons.mic),
           ),
       },
+    );
+  }
+}
+
+/// Recording always works — on-device transcription needs nothing — but notes and tasks
+/// do not get written until a service is chosen and actually configured. Shown whenever
+/// that is not yet true, rather than only on first launch, so a key cleared later in
+/// Settings gets the same nudge as never having set one up.
+class _ConfigureAiBanner extends ConsumerWidget {
+  const _ConfigureAiBanner({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ready = ref.watch(structuringReadyProvider);
+    final isReady = ready.valueOrNull;
+    if (isReady == null || isReady) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Material(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                Icon(Icons.key_outlined, color: theme.colorScheme.onTertiaryContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Set up notes and tasks',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                              color: theme.colorScheme.onTertiaryContainer)),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Recording works right now. Choose an AI service to also get '
+                        'a summary and action items.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onTertiaryContainer),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: theme.colorScheme.onTertiaryContainer),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -376,6 +377,76 @@ void main() {
           reason: 'nothing here takes a key');
     });
   });
+
+  group('recordings location', () {
+    tearDown(() {
+      FilePicker.platform = _RejectingFilePicker();
+    });
+
+    testWidgets('defaults to on-device storage, with nothing to reset',
+        (tester) async {
+      await pumpSettings(tester, []);
+
+      await tester.ensureVisible(find.text('Recordings location'));
+      expect(find.text('On this device (default)'), findsOneWidget);
+      expect(find.byIcon(Icons.restore), findsNothing);
+    });
+
+    testWidgets('picking a folder persists it and explains what changes',
+        (tester) async {
+      FilePicker.platform = _FakeFilePicker('/sdcard/Meetings');
+      await pumpSettings(tester, []);
+
+      await tester.ensureVisible(find.text('Recordings location'));
+      await tester.tap(find.text('Recordings location'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('/sdcard/Meetings'), findsOneWidget);
+      expect(
+        find.textContaining("won't be moved"),
+        findsOneWidget,
+        reason: 'existing recordings must not appear to have moved',
+      );
+    });
+
+    testWidgets('resetting returns to the default location', (tester) async {
+      FilePicker.platform = _FakeFilePicker('/sdcard/Meetings');
+      await pumpSettings(tester, []);
+      await tester.ensureVisible(find.text('Recordings location'));
+      await tester.tap(find.text('Recordings location'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.restore));
+      await tester.pumpAndSettle();
+
+      expect(find.text('On this device (default)'), findsOneWidget);
+    });
+  });
+}
+
+class _FakeFilePicker extends FilePicker {
+  _FakeFilePicker(this.directoryPath);
+  final String? directoryPath;
+
+  @override
+  Future<String?> getDirectoryPath({
+    String? dialogTitle,
+    bool lockParentWindow = false,
+    String? initialDirectory,
+  }) async =>
+      directoryPath;
+}
+
+/// The default for every test that never means to touch the picker — a call reaching
+/// this is a bug in the test, not a real pick.
+class _RejectingFilePicker extends FilePicker {
+  @override
+  Future<String?> getDirectoryPath({
+    String? dialogTitle,
+    bool lockParentWindow = false,
+    String? initialDirectory,
+  }) async =>
+      throw StateError('This test did not expect a directory picker.');
 }
 
 /// Returns a fixed test result, standing in for the platform recognizer.

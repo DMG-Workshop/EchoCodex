@@ -44,6 +44,7 @@ class RecorderService {
   StreamSubscription<Amplitude>? _amplitudeSubscription;
   DateTime? _startedAt;
   String? _path;
+  String? _fallbackWarning;
 
   /// Normalised 0..1 loudness, for the waveform.
   Stream<double> get levels => _levels.stream;
@@ -55,7 +56,18 @@ class RecorderService {
 
   Future<bool> hasPermission() => _recorder.hasPermission();
 
-  Future<void> start() async {
+  /// Set once by [start] when the configured location could not be used, so the caller
+  /// can tell the user without interrupting the recording that already fell back.
+  String? takeFallbackWarning() {
+    final warning = _fallbackWarning;
+    _fallbackWarning = null;
+    return warning;
+  }
+
+  /// [recordingsDirPath] is the folder chosen in Settings, or null for the app's own
+  /// storage. Resolved fresh on every recording — not cached — so a folder that comes
+  /// back (an SD card reinserted) is used again without restarting the app.
+  Future<void> start({String? recordingsDirPath}) async {
     if (!await _recorder.hasPermission()) {
       throw const RecorderException(
         'Microphone access was declined.',
@@ -63,12 +75,11 @@ class RecorderService {
       );
     }
 
-    final dir = await getApplicationDocumentsDirectory();
-    final recordings = Directory(p.join(dir.path, 'recordings'));
-    if (!recordings.existsSync()) recordings.createSync(recursive: true);
+    final location = await resolveRecordingsDirectory(recordingsDirPath);
+    _fallbackWarning = location.fallbackWarning;
 
     _path = p.join(
-      recordings.path,
+      location.directory.path,
       'rec_${DateTime.now().millisecondsSinceEpoch}.wav',
     );
     _history.clear();
@@ -167,6 +178,66 @@ class RecorderService {
   /// Loudness history, for tests and for drawing the finished waveform.
   List<double> get waveform =>
       _history.map((l) => _normalise(l.db)).toList(growable: false);
+}
+
+/// Where a recording landed: the folder itself, and — if the one the user configured
+/// could not be used — the warning to tell them about it.
+class RecordingsLocation {
+  const RecordingsLocation(this.directory, {this.fallbackWarning});
+  final Directory directory;
+  final String? fallbackWarning;
+}
+
+/// Resolves where a new recording should be written.
+///
+/// [configuredPath] is whatever is saved in Settings, or null for the default. A
+/// configured folder is proven writable before it is trusted — a removed SD card or a
+/// revoked permission must fall back to the device's own storage rather than losing the
+/// recording, so this is checked fresh on every call rather than once at startup.
+///
+/// [defaultDirectory] resolves the app's own storage; overridable so tests never touch
+/// the real path_provider platform channel.
+Future<RecordingsLocation> resolveRecordingsDirectory(
+  String? configuredPath, {
+  Future<Directory> Function() defaultDirectory = _defaultRecordingsDirectory,
+}) async {
+  Future<Directory> fallback() async {
+    final dir = await defaultDirectory();
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    return dir;
+  }
+
+  if (configuredPath == null) {
+    return RecordingsLocation(await fallback());
+  }
+
+  final chosen = Directory(configuredPath);
+  if (await _isWritable(chosen)) {
+    return RecordingsLocation(chosen);
+  }
+
+  return RecordingsLocation(
+    await fallback(),
+    fallbackWarning: 'The chosen recordings folder is not available, so this one was '
+        'saved on the device instead.',
+  );
+}
+
+Future<Directory> _defaultRecordingsDirectory() async {
+  final dir = await getApplicationDocumentsDirectory();
+  return Directory(p.join(dir.path, 'recordings'));
+}
+
+Future<bool> _isWritable(Directory dir) async {
+  if (!dir.existsSync()) return false;
+  final probe = File(p.join(dir.path, '.transcript_write_test'));
+  try {
+    await probe.writeAsString('', flush: true);
+    await probe.delete();
+    return true;
+  } on FileSystemException {
+    return false;
+  }
 }
 
 /// One loudness sample. Public because [RecorderService.detectSilences] is a pure

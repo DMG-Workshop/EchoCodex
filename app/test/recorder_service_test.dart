@@ -1,8 +1,63 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:transcript_app/src/recording/recorder_service.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 void main() {
+  group('resolveRecordingsDirectory', () {
+    late Directory defaultDir;
+    late Directory customDir;
+
+    setUp(() {
+      defaultDir = Directory.systemTemp.createTempSync('transcript_default_');
+      customDir = Directory.systemTemp.createTempSync('transcript_custom_');
+    });
+
+    tearDown(() {
+      for (final dir in [defaultDir, customDir]) {
+        if (dir.existsSync()) dir.deleteSync(recursive: true);
+      }
+    });
+
+    test('with nothing configured, uses the default and creates it if missing', () async {
+      defaultDir.deleteSync();
+
+      final location = await resolveRecordingsDirectory(
+        null,
+        defaultDirectory: () async => defaultDir,
+      );
+
+      expect(location.directory.path, defaultDir.path);
+      expect(defaultDir.existsSync(), isTrue);
+      expect(location.fallbackWarning, isNull);
+    });
+
+    test('a configured folder that exists and is writable is used as-is', () async {
+      final location = await resolveRecordingsDirectory(
+        customDir.path,
+        defaultDirectory: () async => defaultDir,
+      );
+
+      expect(location.directory.path, customDir.path);
+      expect(location.fallbackWarning, isNull);
+    });
+
+    test('a configured folder that no longer exists falls back, with a warning',
+        () async {
+      final gone = p.join(customDir.path, 'sdcard-that-was-removed');
+
+      final location = await resolveRecordingsDirectory(
+        gone,
+        defaultDirectory: () async => defaultDir,
+      );
+
+      expect(location.directory.path, defaultDir.path);
+      expect(location.fallbackWarning, contains('not available'));
+    });
+  });
+
   group('silence detection', () {
     /// Levels sampled every 100ms, as the recorder produces them.
     List<Level> levels(List<double> db) => [

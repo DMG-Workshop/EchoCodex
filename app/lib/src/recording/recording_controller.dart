@@ -92,6 +92,10 @@ class RecordingController extends StateNotifier<RecordState> {
 
   final List<InterruptionWindow> _windows = [];
 
+  /// Set when a recording just started fell back from the configured folder to the
+  /// device's own storage, so [stopAndProcess] can tell the user once it is done.
+  String? _storageWarning;
+
   /// Gaps the recorder knows about but the queue never will: stretches where the
   /// microphone belonged to another app.
   List<TranscriptGap> get interruptionGaps => [
@@ -102,13 +106,14 @@ class RecordingController extends StateNotifier<RecordState> {
   Future<void> startRecording() async {
     try {
       await _background.prepare();
-      await _recorder.start();
+      await _recorder.start(recordingsDirPath: _settings.recordingsDirPath);
       await _background.startForeground(title: 'Recording');
     } on RecorderException catch (e) {
       state = RecordError(e.message, remedy: e.remedy);
       return;
     }
 
+    _storageWarning = _recorder.takeFallbackWarning();
     _liveText = '';
     _paused = false;
     _windows.clear();
@@ -296,7 +301,15 @@ class RecordingController extends StateNotifier<RecordState> {
         case PipelineComplete(:final transcript, :final outcome):
           await _repository.saveTranscript(recordingId, transcript);
           await _repository.saveNote(recordingId, outcome);
-          state = RecordDone(recordingId, warning: _warningFor(transcript, outcome));
+          final structuringWarning = _warningFor(transcript, outcome);
+          final warning = [
+            if (_storageWarning != null) _storageWarning!,
+            if (structuringWarning != null) structuringWarning,
+          ];
+          state = RecordDone(
+            recordingId,
+            warning: warning.isEmpty ? null : warning.join(' · '),
+          );
         case PipelineFailed(:final transcript):
           await _repository.saveTranscript(recordingId, transcript);
           state = RecordError(
@@ -417,6 +430,24 @@ final recordingsProvider = StreamProvider<List<Recording>>(
 final settingsStoreProvider = Provider<SettingsStore>(
   (ref) => throw UnimplementedError('settingsStoreProvider must be overridden'),
 );
+
+/// Whether the note-writing stage can actually run right now — a provider chosen *and*
+/// its key or address actually present, not just remembered as "the last one picked".
+/// A key cleared later in Settings must count as unconfigured the same as never having
+/// chosen one, so this checks the key store fresh rather than trusting the saved kind.
+///
+/// Recording itself never depends on this: on-device transcription needs nothing, so
+/// recording-only use keeps working when nothing here is set up.
+final structuringReadyProvider = FutureProvider<bool>((ref) async {
+  final settings = ref.watch(settingsStoreProvider);
+  final kind = settings.kindFor(ProviderStage.structuring);
+  if (kind == null) return false;
+  if (kind.needsKey) return ref.watch(keyStoreProvider).has(kind.id);
+  if (kind.needsEndpoint) {
+    return (settings.endpointFor(kind) ?? '').trim().isNotEmpty;
+  }
+  return true;
+});
 
 final recordingControllerProvider =
     StateNotifierProvider<RecordingController, RecordState>(
