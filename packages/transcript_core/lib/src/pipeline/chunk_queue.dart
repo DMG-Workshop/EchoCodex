@@ -200,6 +200,7 @@ class ChunkQueue {
     this.policy = const RetryPolicy(),
     this.maxConcurrent = 2,
     this.languageHint,
+    this.speakerLabels = false,
     DateTime Function()? clock,
     math.Random? random,
   })  : _now = clock ?? DateTime.now,
@@ -214,6 +215,9 @@ class ChunkQueue {
   final int maxConcurrent;
 
   final String? languageHint;
+
+  /// Forwarded to every transcription request. See [TranscribeRequest.speakerLabels].
+  final bool speakerLabels;
   final DateTime Function() _now;
   final math.Random _random;
 
@@ -327,6 +331,7 @@ class ChunkQueue {
         offsetMs: chunk.startMs,
         languageHint: languageHint,
         primingPrompt: await _primingFor(chunk),
+        speakerLabels: speakerLabels,
       ));
 
       await store.update(chunk.copyWith(

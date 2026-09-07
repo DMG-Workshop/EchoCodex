@@ -38,6 +38,20 @@ class Recordings extends Table {
   IntColumn get inputTokens => integer().nullable()();
   IntColumn get outputTokens => integer().nullable()();
 
+  /// The assembled transcript exactly as spoken, before any cleanup. Kept even when
+  /// [cleanedTranscriptText] exists, so nothing the user said is ever only reachable
+  /// through an edited version of it.
+  TextColumn get transcriptText => text().nullable()();
+
+  /// [transcriptText] with filler words and stutters removed, when the punctuation and
+  /// filler cleanup workflow feature is on. Null when the feature is off or cleanup has
+  /// not run for this recording.
+  TextColumn get cleanedTranscriptText => text().nullable()();
+
+  /// Marked to jump the backlog when several recordings are waiting to be transcribed —
+  /// see the priority transcription queue workflow feature.
+  BoolColumn get priority => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -101,10 +115,17 @@ class TranscriptDatabase extends _$TranscriptDatabase {
   TranscriptDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(recordings, recordings.transcriptText);
+            await m.addColumn(recordings, recordings.cleanedTranscriptText);
+            await m.addColumn(recordings, recordings.priority);
+          }
+        },
         beforeOpen: (details) async {
           // SQLite disables foreign keys by default, so the cascade from a deleted
           // recording to its chunks silently does nothing and the orphaned rows resume
@@ -113,7 +134,8 @@ class TranscriptDatabase extends _$TranscriptDatabase {
         },
       );
 
-  /// Recordings with chunks still outstanding. Called at launch: this is what turns a
+  /// Recordings with chunks still outstanding, priority ones first — see the priority
+  /// transcription queue workflow feature. Called at launch: this is what turns a
   /// process the OS killed mid-meeting into work that simply resumes.
   Future<List<String>> recordingsWithUnfinishedChunks() async {
     final rows = await (select(chunks)
@@ -121,7 +143,14 @@ class TranscriptDatabase extends _$TranscriptDatabase {
               c.state.equalsValue(ChunkState.transcribed).not() &
               c.state.equalsValue(ChunkState.failed).not()))
         .get();
-    return {for (final row in rows) row.recordingId}.toList();
+    final ids = {for (final row in rows) row.recordingId};
+    if (ids.isEmpty) return const [];
+
+    final recordingRows = await (select(recordings)
+          ..where((r) => r.id.isIn(ids))
+          ..orderBy([(r) => OrderingTerm.desc(r.priority)]))
+        .get();
+    return recordingRows.map((r) => r.id).toList();
   }
 
   /// Work the queue can pick up right now, oldest first, bounded by the caller so no

@@ -11,12 +11,28 @@ import 'note_screen.dart';
 import 'record_screen.dart';
 
 /// Everything recorded on this device. Local only — there is no account and no sync.
-class LibraryScreen extends ConsumerWidget {
+class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
+}
+
+class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final recordings = ref.watch(recordingsProvider);
+    final searchEnabled =
+        ref.watch(settingsStoreProvider).workflowEnabled('searchableHistory');
 
     return Scaffold(
       appBar: AppBar(
@@ -34,15 +50,65 @@ class LibraryScreen extends ConsumerWidget {
       body: recordings.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not open the library.\n$e')),
-        data: (items) => items.isEmpty
-            ? const _EmptyLibrary()
-            : ListView.separated(
-                itemCount: items.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, i) => _RecordingTile(recording: items[i]),
+        data: (items) {
+          if (items.isEmpty) return const _EmptyLibrary();
+
+          final filtered = searchEnabled ? _filtered(items) : items;
+          return Column(
+            children: [
+              if (searchEnabled)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (v) => setState(() => _query = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search recordings and transcripts',
+                      prefixIcon: const Icon(Icons.search),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () => setState(() {
+                                _searchController.clear();
+                                _query = '';
+                              }),
+                            ),
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: Text('Nothing matches "$_query".',
+                            style: Theme.of(context).textTheme.bodyMedium),
+                      )
+                    : ListView.separated(
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (context, i) =>
+                            _RecordingTile(recording: filtered[i]),
+                      ),
               ),
+            ],
+          );
+        },
       ),
     );
+  }
+
+  List<db.Recording> _filtered(List<db.Recording> items) {
+    final needle = _query.trim().toLowerCase();
+    if (needle.isEmpty) return items;
+    return items.where((r) {
+      return r.title.toLowerCase().contains(needle) ||
+          (r.transcriptText?.toLowerCase().contains(needle) ?? false) ||
+          (r.cleanedTranscriptText?.toLowerCase().contains(needle) ?? false);
+    }).toList();
   }
 }
 
@@ -85,6 +151,8 @@ class _RecordingTile extends ConsumerWidget {
     final theme = Theme.of(context);
     final structured = recording.noteJson != null;
     final duration = Duration(milliseconds: recording.durationMs);
+    final priorityQueueEnabled =
+        ref.watch(settingsStoreProvider).workflowEnabled('priorityQueue');
 
     return Dismissible(
       key: ValueKey(recording.id),
@@ -145,7 +213,20 @@ class _RecordingTile extends ConsumerWidget {
               ? theme.colorScheme.primary
               : theme.colorScheme.onSurfaceVariant,
         ),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: !structured && priorityQueueEnabled
+            ? IconButton(
+                icon: Icon(
+                  recording.priority ? Icons.bolt : Icons.bolt_outlined,
+                  color: recording.priority ? theme.colorScheme.primary : null,
+                ),
+                tooltip: recording.priority
+                    ? 'Urgent — will transcribe before the rest of the backlog'
+                    : 'Mark urgent',
+                onPressed: () => ref
+                    .read(repositoryProvider)
+                    .setPriority(recording.id, !recording.priority),
+              )
+            : const Icon(Icons.chevron_right),
         onTap: () => Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => NoteScreen(recordingId: recording.id),

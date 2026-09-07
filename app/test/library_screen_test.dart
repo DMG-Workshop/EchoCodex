@@ -1,24 +1,65 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:transcript_app/src/data/database.dart' as db;
 import 'package:transcript_app/src/recording/recording_controller.dart';
 import 'package:transcript_app/src/screens/library_screen.dart';
+import 'package:transcript_app/src/settings/provider_config.dart';
 
 import 'fixtures.dart';
 
 void main() {
   late FakeRecordingRepository repo;
 
-  Future<void> pumpLibrary(WidgetTester tester) async {
-    repo = FakeRecordingRepository([recordingRow()]);
+  Future<void> pumpLibrary(
+    WidgetTester tester, {
+    List<db.Recording>? rows,
+  }) async {
+    repo = FakeRecordingRepository(rows ?? [recordingRow()]);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [repositoryProvider.overrideWithValue(repo)],
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
+        ],
         child: const MaterialApp(home: LibraryScreen()),
       ),
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('searching filters by title and transcript text', (tester) async {
+    await pumpLibrary(tester, rows: [
+      recordingRow(),
+      recordingRow(
+        transcriptText: 'a totally different subject',
+      ).copyWith(id: 'r_2', title: 'Standup notes'),
+    ]);
+
+    expect(find.text('Auth migration kickoff'), findsOneWidget);
+    expect(find.text('Standup notes'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'kickoff');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Auth migration kickoff'), findsOneWidget);
+    expect(find.text('Standup notes'), findsNothing);
+  });
+
+  testWidgets('an unfinished recording can be marked urgent', (tester) async {
+    await pumpLibrary(tester, rows: [recordingRow(structured: false)]);
+
+    expect(find.byIcon(Icons.bolt_outlined), findsOneWidget);
+    expect(find.byIcon(Icons.bolt), findsNothing);
+
+    await tester.tap(find.byIcon(Icons.bolt_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.bolt), findsOneWidget);
+  });
 
   testWidgets('swiping asks for confirmation before deleting anything',
       (tester) async {
