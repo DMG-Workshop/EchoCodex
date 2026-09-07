@@ -4,6 +4,7 @@ import 'package:transcript_core/transcript_core.dart';
 
 import '../net/dio_transport.dart';
 import '../privacy/crash_log.dart';
+import '../recording/on_device_stt.dart';
 import '../whisper/native_whisper_engine.dart';
 import 'secure_key_store.dart';
 
@@ -151,12 +152,43 @@ class ProviderSelection {
 /// Builds a live provider from a selection. The one place that knows how to turn stored
 /// settings into an adapter — the rest of the app talks to the interfaces.
 class ProviderFactory {
-  ProviderFactory(this._transport, this._keys, {WhisperEngine? whisperEngine})
-      : _whisperEngine = whisperEngine ?? NativeWhisperEngine();
+  ProviderFactory(
+    this._transport,
+    this._keys, {
+    WhisperEngine? whisperEngine,
+    LiveTranscriptionSource Function()? liveSource,
+  })  : _whisperEngine = whisperEngine ?? NativeWhisperEngine(),
+        _liveSource = liveSource ?? OnDeviceSpeechSource.new;
 
   final HttpTransport _transport;
   final KeyStore _keys;
   final WhisperEngine _whisperEngine;
+
+  /// Built lazily: constructing the platform recognizer touches a plugin channel, which
+  /// a widget test has no binding for.
+  final LiveTranscriptionSource Function() _liveSource;
+
+  /// The provider a connection test should exercise.
+  ///
+  /// Usually the same object the app would use for real, with one exception:
+  /// on-device recognition listens to the microphone directly and so is a
+  /// [LiveTranscriptionSource], never a [TranscriptionProvider] — it cannot appear in
+  /// [transcription]. It still has a meaningful test: whether the platform's dictation
+  /// component is present and which languages it has. Without this the settings screen
+  /// fell through to the generic "no provider" branch and told a user who needs no key
+  /// to go and paste one.
+  Future<AiProvider?> testable(
+    ProviderSelection selection,
+    ProviderStage stage,
+  ) async {
+    if (stage == ProviderStage.transcription &&
+        selection.kind == ProviderKind.onDeviceStt) {
+      return _liveSource();
+    }
+    return stage == ProviderStage.structuring
+        ? await structuring(selection)
+        : await transcription(selection);
+  }
 
   Future<StructuringProvider?> structuring(ProviderSelection selection) async {
     final key =
@@ -177,7 +209,7 @@ class ProviderFactory {
       ProviderKind.gemini => GeminiStructuringProvider(
           transport: _transport,
           apiKey: key!,
-          model: selection.model ?? 'gemini-2.0-flash',
+          model: selection.model ?? GeminiStructuringProvider.defaultModel,
         ),
       ProviderKind.ollama || ProviderKind.lmStudio => LocalStructuringProvider(
           transport: _transport,
@@ -207,7 +239,7 @@ class ProviderFactory {
       ProviderKind.geminiAudio => GeminiTranscriptionProvider(
           transport: _transport,
           apiKey: key!,
-          model: selection.model ?? 'gemini-2.0-flash',
+          model: selection.model ?? GeminiStructuringProvider.defaultModel,
         ),
       ProviderKind.whisperOffline => WhisperTranscriptionProvider(
           engine: _whisperEngine,

@@ -14,12 +14,20 @@ class GeminiStructuringProvider extends StructuringProvider {
   GeminiStructuringProvider({
     required HttpTransport transport,
     required String apiKey,
-    this.model = 'gemini-2.0-flash',
+    this.model = defaultModel,
     Uri? baseUrl,
   })  : _transport = transport,
         _apiKey = apiKey,
         _baseUrl =
             baseUrl ?? Uri.parse('https://generativelanguage.googleapis.com');
+
+  /// The model both halves default to.
+  ///
+  /// Google retires model ids fairly aggressively — `gemini-2.0-flash` was the default
+  /// here and has since stopped being served, which surfaced as "pick one of the listed
+  /// models" on a key that was otherwise perfectly good. Flash rather than Pro because
+  /// it is the cheap, fast one, and the user is paying for their own calls.
+  static const String defaultModel = 'gemini-2.5-flash';
 
   final HttpTransport _transport;
   final String _apiKey;
@@ -125,7 +133,7 @@ class GeminiTranscriptionProvider extends TranscriptionProvider {
   GeminiTranscriptionProvider({
     required HttpTransport transport,
     required String apiKey,
-    this.model = 'gemini-2.0-flash',
+    this.model = GeminiStructuringProvider.defaultModel,
     Uri? baseUrl,
   })  : _transport = transport,
         _apiKey = apiKey,
