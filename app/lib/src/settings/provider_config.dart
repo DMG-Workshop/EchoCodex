@@ -292,6 +292,15 @@ class SettingsStore {
   static const _kModelPrefix = 'provider.model.';
   static const _kEndpointPrefix = 'provider.endpoint.';
   static const _kOnboarded = 'onboarding.completed';
+  static const _kRecordingsDir = 'recordings.dirPath';
+
+  /// A folder the user picked instead of the app's own storage, or null for the
+  /// default. New recordings go here; recordings already saved elsewhere are not moved.
+  String? get recordingsDirPath => _prefs.getString(_kRecordingsDir);
+
+  Future<void> setRecordingsDirPath(String? path) => path == null
+      ? _prefs.remove(_kRecordingsDir)
+      : _prefs.setString(_kRecordingsDir, path);
 
   /// Whether the user has been through the first-run explanation.
   ///

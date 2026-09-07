@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transcript_core/transcript_core.dart';
@@ -70,6 +71,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               stage: ProviderStage.structuring,
               onChanged: _onChanged),
           const Divider(height: 32),
+          _RecordingsLocationTile(onChanged: _onChanged),
+          const Divider(height: 32),
           ListTile(
             leading: const Icon(Icons.lock_outline),
             title: const Text('Privacy'),
@@ -93,6 +96,54 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Where new recordings are written. Picking a folder only changes what happens next —
+/// nothing already saved is moved, so a change here can never lose a recording.
+class _RecordingsLocationTile extends ConsumerWidget {
+  const _RecordingsLocationTile({required this.onChanged});
+
+  final VoidCallback onChanged;
+
+  Future<void> _choose(BuildContext context, WidgetRef ref) async {
+    final chosen = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Choose where recordings are saved',
+    );
+    if (chosen == null || !context.mounted) return;
+
+    await ref.read(settingsStoreProvider).setRecordingsDirPath(chosen);
+    onChanged();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text(
+        "New recordings will be saved here. Existing recordings won't be moved.",
+      ),
+    ));
+  }
+
+  Future<void> _resetToDefault(BuildContext context, WidgetRef ref) async {
+    await ref.read(settingsStoreProvider).setRecordingsDirPath(null);
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final path = ref.watch(settingsStoreProvider).recordingsDirPath;
+
+    return ListTile(
+      leading: const Icon(Icons.folder_outlined),
+      title: const Text('Recordings location'),
+      subtitle: Text(path ?? 'On this device (default)'),
+      trailing: path == null
+          ? const Icon(Icons.chevron_right)
+          : IconButton(
+              icon: const Icon(Icons.restore),
+              tooltip: 'Use the default location',
+              onPressed: () => _resetToDefault(context, ref),
+            ),
+      onTap: () => _choose(context, ref),
     );
   }
 }

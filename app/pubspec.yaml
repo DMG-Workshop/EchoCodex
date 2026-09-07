@@ -50,6 +50,10 @@ dependencies:
   # someone has to remember to bump alongside pubspec.
   package_info_plus: ^8.1.1
 
+  # The recordings-location directory picker: Android's Storage Access Framework
+  # (ACTION_OPEN_DOCUMENT_TREE) under the hood, an NSOpenPanel-style picker on iOS.
+  file_picker: ^11.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
