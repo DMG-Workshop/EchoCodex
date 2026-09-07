@@ -1,8 +1,6 @@
 import 'dart:convert';
 
-// Not exported from file_picker.dart, but this is the only way to fake the platform
-// side of a directory pick in a widget test.
-import 'package:file_picker/src/platform/file_picker_platform_interface.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -382,7 +380,7 @@ void main() {
 
   group('recordings location', () {
     tearDown(() {
-      FilePickerPlatform.instance = _RejectingFilePicker();
+      FilePicker.platform = _RejectingFilePicker();
     });
 
     testWidgets('defaults to on-device storage, with nothing to reset',
@@ -396,7 +394,7 @@ void main() {
 
     testWidgets('picking a folder persists it and explains what changes',
         (tester) async {
-      FilePickerPlatform.instance = _FakeFilePicker('/sdcard/Meetings');
+      FilePicker.platform = _FakeFilePicker('/sdcard/Meetings');
       await pumpSettings(tester, []);
 
       await tester.ensureVisible(find.text('Recordings location'));
@@ -412,7 +410,7 @@ void main() {
     });
 
     testWidgets('resetting returns to the default location', (tester) async {
-      FilePickerPlatform.instance = _FakeFilePicker('/sdcard/Meetings');
+      FilePicker.platform = _FakeFilePicker('/sdcard/Meetings');
       await pumpSettings(tester, []);
       await tester.ensureVisible(find.text('Recordings location'));
       await tester.tap(find.text('Recordings location'));
@@ -426,7 +424,7 @@ void main() {
   });
 }
 
-class _FakeFilePicker extends FilePickerPlatform {
+class _FakeFilePicker extends FilePicker {
   _FakeFilePicker(this.directoryPath);
   final String? directoryPath;
 
@@ -441,7 +439,7 @@ class _FakeFilePicker extends FilePickerPlatform {
 
 /// The default for every test that never means to touch the picker — a call reaching
 /// this is a bug in the test, not a real pick.
-class _RejectingFilePicker extends FilePickerPlatform {
+class _RejectingFilePicker extends FilePicker {
   @override
   Future<String?> getDirectoryPath({
     String? dialogTitle,

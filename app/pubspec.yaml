@@ -52,7 +52,15 @@ dependencies:
 
   # The recordings-location directory picker: Android's Storage Access Framework
   # (ACTION_OPEN_DOCUMENT_TREE) under the hood, an NSOpenPanel-style picker on iOS.
-  file_picker: ^11.0.3
+  #
+  # Pinned below 11.x: 11.0.3's android/build.gradle special-cases AGP 9+ by skipping
+  # the Kotlin Android plugin instead of applying it, on the assumption AGP's built-in
+  # Kotlin support picks up the slack — it doesn't here, so FilePickerPlugin.kt never
+  # compiles and the app fails at GeneratedPluginRegistrant.java with "cannot find
+  # symbol". 10.3.x applies the Kotlin plugin unconditionally, the same as every other
+  # plugin this project already depends on, and builds cleanly. (10.3.11 exists but is
+  # retracted on pub.dev, so this pins to 10.3.10, the last non-retracted release.)
+  file_picker: ^10.3.10
 
 dev_dependencies:
   flutter_test:

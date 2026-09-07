@@ -108,7 +108,7 @@ class _RecordingsLocationTile extends ConsumerWidget {
   final VoidCallback onChanged;
 
   Future<void> _choose(BuildContext context, WidgetRef ref) async {
-    final chosen = await FilePicker.getDirectoryPath(
+    final chosen = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Choose where recordings are saved',
     );
     if (chosen == null || !context.mounted) return;
