@@ -141,11 +141,16 @@ class _StageSectionState extends ConsumerState<_StageSection> {
   void initState() {
     super.initState();
     // Restore what was chosen last time, rather than resetting to the first option and
-    // silently discarding a configured provider on every visit.
-    _kind = _store.kindFor(widget.stage) ??
-        (widget.stage == ProviderStage.transcription
+    // silently discarding a configured provider on every visit. A saved kind that is no
+    // longer offered for this stage (for example, a transcription option retired since
+    // it was picked) falls back to the default rather than selecting nothing.
+    final saved = _store.kindFor(widget.stage);
+    final offered = ProviderKind.forStage(widget.stage);
+    _kind = (saved != null && offered.contains(saved))
+        ? saved
+        : (widget.stage == ProviderStage.transcription
             ? SettingsStore.defaultTranscription
-            : ProviderKind.forStage(widget.stage).first);
+            : offered.first);
     _endpointController.text = _store.endpointFor(_kind) ?? '';
     _modelController.text = _store.modelFor(_kind) ?? '';
     _refreshKeyState();

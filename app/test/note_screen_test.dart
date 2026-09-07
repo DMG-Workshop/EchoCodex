@@ -146,4 +146,67 @@ void main() {
 
     expect(find.textContaining('no longer here'), findsOneWidget);
   });
+
+  group('deleting from the detail screen', () {
+    late FakeRecordingRepository repo;
+
+    Future<void> pumpFromLibrary(WidgetTester tester) async {
+      repo = FakeRecordingRepository([recordingRow()]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [repositoryProvider.overrideWithValue(repo)],
+          child: MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                appBar: AppBar(title: const Text('Recordings')),
+                body: Center(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const NoteScreen(recordingId: 'r_1'),
+                      ),
+                    ),
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('asks first, and declining leaves the recording alone',
+        (tester) async {
+      await pumpFromLibrary(tester);
+
+      await tester.tap(find.byTooltip('Delete recording'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete this recording?'), findsOneWidget);
+
+      await tester.tap(find.text('Keep'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('open'), findsNothing,
+          reason: 'declining stays on the recording, not back at the library');
+      expect(repo.deletedIds, isEmpty);
+    });
+
+    testWidgets('confirming deletes it, leaves the screen, and reports it',
+        (tester) async {
+      await pumpFromLibrary(tester);
+
+      await tester.tap(find.byTooltip('Delete recording'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Recordings'), findsOneWidget,
+          reason: 'a deleted recording has nothing left to show');
+      expect(find.text('Recording deleted'), findsOneWidget);
+      expect(repo.deletedIds, ['r_1']);
+    });
+  });
 }
