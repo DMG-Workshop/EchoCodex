@@ -1,4 +1,4 @@
-# Transcript — Architecture & Build Plan
+# KallaNotes — Architecture & Build Plan
 
 A cross-platform (iOS + Android) recorder that turns speech into structured, actionable notes
 using **the user's own AI** — their API key, or their own machine on the LAN. No inference

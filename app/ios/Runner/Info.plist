@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Transcript App</string>
+	<string>KallaNotes</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -67,12 +67,12 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>CFBundleDisplayName</key>
-	<string>Transcript</string>
+	<string>KallaNotes</string>
 
 	<!-- Recording. Both strings are shown verbatim at the permission prompt and are read
 	     during App Review, so they name the benefit rather than the mechanism. -->
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Transcript records audio so it can be turned into notes and action items on this device or by the AI service you choose.</string>
+	<string>KallaNotes records audio so it can be turned into notes and action items on this device or by the AI service you choose.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Speech recognition runs on this device to turn your recordings into text without sending audio anywhere.</string>
 

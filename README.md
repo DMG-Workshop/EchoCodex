@@ -1,4 +1,4 @@
-# Transcript
+# KallaNotes
 
 A cross-platform (iOS + Android) recorder that turns speech into structured, actionable
 notes — bulleted summaries, action items, Kanban boards and timelines — using **your own AI**.

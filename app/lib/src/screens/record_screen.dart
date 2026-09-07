@@ -68,7 +68,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Transcript'),
+        title: const Text('KallaNotes'),
         actions: [
           IconButton(
             icon: const Icon(Icons.library_books_outlined),

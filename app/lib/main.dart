@@ -51,7 +51,7 @@ class _TranscriptAppState extends ConsumerState<TranscriptApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Transcript',
+      title: 'KallaNotes',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorSchemeSeed: TranscriptApp._seed,
