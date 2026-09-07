@@ -259,6 +259,9 @@ class RecordingController extends StateNotifier<RecordState> {
             ? null
             : 'Custom vocabulary: ${_settings.customVocabulary}',
         additionalGaps: interruptionGaps,
+        keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
+        flashcardLimit: _flashcardLimit,
+        quizLimit: _quizLimit,
       ),
       recordingId,
     );
@@ -289,6 +292,9 @@ class RecordingController extends StateNotifier<RecordState> {
           recordingId: recordingId,
           referenceDate: _isoDate(recording.startedAt),
           timeZone: DateTime.now().timeZoneName,
+          keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
+          flashcardLimit: _flashcardLimit,
+          quizLimit: _quizLimit,
         ),
         recordingId,
       );
@@ -311,6 +317,12 @@ class RecordingController extends StateNotifier<RecordState> {
   String? get _languageHint => _settings.workflowEnabled('multiLanguage')
       ? _settings.transcriptionLanguage
       : null;
+
+  int get _flashcardLimit =>
+      _settings.workflowEnabled('flashcards') ? _settings.flashcardLimit : 0;
+
+  int get _quizLimit =>
+      _settings.workflowEnabled('quizzes') ? _settings.quizLimit : 0;
 
   /// The cleaned transcript to store alongside the raw one, or null when the
   /// punctuation and filler cleanup workflow feature is off.

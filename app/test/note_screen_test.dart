@@ -151,6 +151,74 @@ void main() {
     expect(find.text('Raw'), findsNothing);
   });
 
+  testWidgets('no study aids says so, rather than an empty tab', (tester) async {
+    await pumpNote(tester, recordingRow());
+    await tester.tap(find.text('Study'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No study aids for this recording'), findsOneWidget);
+  });
+
+  testWidgets('key concepts, flashcards and a quiz all render', (tester) async {
+    final note = noteJson()
+      ..['keyConcepts'] = [
+        {'term': 'OIDC', 'explanation': 'The protocol the new auth flow uses.'}
+      ]
+      ..['flashcards'] = [
+        {'front': 'What replaces the session store?', 'back': 'OIDC-based auth.'}
+      ]
+      ..['quiz'] = [
+        {
+          'question': 'Who owns the migration?',
+          'choices': ['Priya', 'Sam'],
+          'correctIndex': 0,
+          'explanation': 'Priya accepted it in the recording.',
+        }
+      ];
+
+    await pumpNote(tester, recordingRow(overrideNote: jsonEncode(note)));
+    await tester.tap(find.text('Study'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('OIDC'), findsOneWidget);
+    expect(find.text('The protocol the new auth flow uses.'), findsOneWidget);
+
+    expect(find.text('What replaces the session store?'), findsOneWidget);
+    expect(find.text('OIDC-based auth.'), findsNothing,
+        reason: 'the back of the card is hidden until tapped');
+    await tester.tap(find.text('What replaces the session store?'));
+    await tester.pumpAndSettle();
+    expect(find.text('OIDC-based auth.'), findsOneWidget);
+
+    expect(find.textContaining('Who owns the migration?'), findsOneWidget);
+    expect(find.text('Check answer'), findsOneWidget);
+  });
+
+  testWidgets('checking a quiz answer reveals correctness and the explanation',
+      (tester) async {
+    final note = noteJson()
+      ..['quiz'] = [
+        {
+          'question': 'Who owns the migration?',
+          'choices': ['Priya', 'Sam'],
+          'correctIndex': 0,
+          'explanation': 'Priya accepted it in the recording.',
+        }
+      ];
+
+    await pumpNote(tester, recordingRow(overrideNote: jsonEncode(note)));
+    await tester.tap(find.text('Study'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sam'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Check answer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Not quite.'), findsOneWidget);
+    expect(find.text('Priya accepted it in the recording.'), findsOneWidget);
+  });
+
   testWidgets('shows which services made the note and what it cost', (tester) async {
     await pumpNote(tester, recordingRow());
     await tester.dragUntilVisible(

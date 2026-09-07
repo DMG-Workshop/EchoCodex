@@ -106,6 +106,9 @@ class RecordingPipeline {
     required String timeZone,
     String? languageHint,
     String? userContext,
+    bool keyConceptsEnabled = false,
+    int flashcardLimit = 0,
+    int quizLimit = 0,
   }) async* {
     final config =
         chunkerConfig.forProvider(transcription.capabilities.maxRequestBytes);
@@ -143,8 +146,11 @@ class RecordingPipeline {
         referenceDate: referenceDate,
         timeZone: timeZone,
         sttProviderName: transcription.displayName,
-        diarizationAvailable: transcription.capabilities.diarization,
+        diarizationAvailable: transcript.segments.any((s) => s.speaker != null),
         userContext: userContext,
+        keyConceptsEnabled: keyConceptsEnabled,
+        flashcardLimit: flashcardLimit,
+        quizLimit: quizLimit,
       );
       yield PipelineComplete(transcript, outcome);
     } catch (e) {

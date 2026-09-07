@@ -421,6 +421,9 @@ class NoteDocument {
     this.tasks = const [],
     this.risks = const [],
     this.timelineAnchors = const [],
+    this.keyConcepts = const [],
+    this.flashcards = const [],
+    this.quiz = const [],
   });
 
   final NoteMeta meta;
@@ -432,6 +435,12 @@ class NoteDocument {
   final List<Risk> risks;
   final List<TimelineAnchor> timelineAnchors;
 
+  /// Study aids. Empty rather than null on the Dart side even when the provider
+  /// returned `null` for a feature that was off — "nothing to show" either way.
+  final List<KeyConcept> keyConcepts;
+  final List<Flashcard> flashcards;
+  final List<QuizQuestion> quiz;
+
   factory NoteDocument.fromJson(Map<String, dynamic> j) => NoteDocument(
         meta: NoteMeta.fromJson(_obj(j['meta'])),
         participants: _list(j['participants'], Participant.fromJson),
@@ -441,6 +450,9 @@ class NoteDocument {
         tasks: _list(j['tasks'], NoteTask.fromJson),
         risks: _list(j['risks'], Risk.fromJson),
         timelineAnchors: _list(j['timelineAnchors'], TimelineAnchor.fromJson),
+        keyConcepts: _list(j['keyConcepts'], KeyConcept.fromJson),
+        flashcards: _list(j['flashcards'], Flashcard.fromJson),
+        quiz: _list(j['quiz'], QuizQuestion.fromJson),
       );
 
   Map<String, dynamic> toJson() => {
@@ -452,6 +464,9 @@ class NoteDocument {
         'tasks': tasks.map((e) => e.toJson()).toList(),
         'risks': risks.map((e) => e.toJson()).toList(),
         'timelineAnchors': timelineAnchors.map((e) => e.toJson()).toList(),
+        'keyConcepts': keyConcepts.map((e) => e.toJson()).toList(),
+        'flashcards': flashcards.map((e) => e.toJson()).toList(),
+        'quiz': quiz.map((e) => e.toJson()).toList(),
       };
 
   /// Board columns, derived — not a second model call. See ARCHITECTURE.md §3.
@@ -555,7 +570,73 @@ class NoteDocument {
         tasks: next,
         risks: risks,
         timelineAnchors: timelineAnchors,
+        keyConcepts: keyConcepts,
+        flashcards: flashcards,
+        quiz: quiz,
       );
+}
+
+class KeyConcept {
+  const KeyConcept({required this.term, required this.explanation});
+
+  final String term;
+  final String explanation;
+
+  factory KeyConcept.fromJson(Map<String, dynamic> j) => KeyConcept(
+        term: j['term'] as String? ?? '',
+        explanation: j['explanation'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {'term': term, 'explanation': explanation};
+}
+
+class Flashcard {
+  const Flashcard({required this.front, required this.back});
+
+  final String front;
+  final String back;
+
+  factory Flashcard.fromJson(Map<String, dynamic> j) => Flashcard(
+        front: j['front'] as String? ?? '',
+        back: j['back'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() => {'front': front, 'back': back};
+}
+
+class QuizQuestion {
+  const QuizQuestion({
+    required this.question,
+    required this.choices,
+    required this.correctIndex,
+    this.explanation,
+  });
+
+  final String question;
+  final List<String> choices;
+
+  /// Index into [choices]. Clamped on read so a malformed response cannot point outside
+  /// the list the UI renders.
+  final int correctIndex;
+  final String? explanation;
+
+  factory QuizQuestion.fromJson(Map<String, dynamic> j) {
+    final choices = _stringList(j['choices']);
+    final rawIndex = (j['correctIndex'] as num?)?.toInt() ?? 0;
+    return QuizQuestion(
+      question: j['question'] as String? ?? '',
+      choices: choices,
+      correctIndex: choices.isEmpty ? 0 : rawIndex.clamp(0, choices.length - 1),
+      explanation: j['explanation'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'question': question,
+        'choices': choices,
+        'correctIndex': correctIndex,
+        'explanation': explanation,
+      };
 }
 
 // ---------------------------------------------------------------------------

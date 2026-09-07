@@ -83,6 +83,12 @@ Map<String, dynamic> validNoteJson() => {
           },
         },
       ],
+      // Empty rather than null so this fixture round-trips through toJson() unchanged —
+      // NoteDocument always encodes an absent study aid as [], never back to null. The
+      // null case (feature genuinely off) has its own test in note_document_test.dart.
+      'keyConcepts': <Map<String, dynamic>>[],
+      'flashcards': <Map<String, dynamic>>[],
+      'quiz': <Map<String, dynamic>>[],
     };
 
 /// The transcript the fixture note cites. Every quote above appears here verbatim, so

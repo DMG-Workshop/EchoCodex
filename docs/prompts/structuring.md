@@ -70,6 +70,20 @@ meta.extractionConfidence to "medium" or "low".
 
 DEDUPLICATION
 The same commitment restated three times is one task. Merge, and cite the clearest statement.
+
+STUDY AIDS
+These three fields are study aids, not extractions: unlike the rest of this schema they
+carry no sourceRef, but they must still be grounded in what was actually said — never
+invented to fill a quota. Return null for a field whose feature is off below.
+- keyConcepts: {{keyConceptsOnOrOff}}. Up to 8 of the most important ideas or terms
+  actually discussed, each with a one-sentence explanation. Null if there is nothing worth
+  studying, or the feature is off.
+- flashcards: {{flashcardLimitOrOff}}. Up to that many flashcards (front: a question or
+  term, back: the answer) covering material actually discussed. Fewer is fine; null only
+  if none are warranted, or the feature is off.
+- quiz: {{quizLimitOrOff}}. Up to that many multiple-choice questions (3-5 choices each,
+  `correctIndex` pointing at the right one) testing material actually discussed. Fewer is
+  fine; null only if none are warranted, or the feature is off.
 ```
 
 Then the user turn:
