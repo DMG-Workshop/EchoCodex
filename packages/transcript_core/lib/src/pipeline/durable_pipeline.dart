@@ -31,6 +31,9 @@ class DurableRecordingPipeline {
     required String timeZone,
     String? userContext,
     List<TranscriptGap> additionalGaps = const [],
+    bool keyConceptsEnabled = false,
+    int flashcardLimit = 0,
+    int quizLimit = 0,
   }) async* {
     final config = chunkerConfig
         .forProvider(queue.transcription.capabilities.maxRequestBytes);
@@ -45,6 +48,9 @@ class DurableRecordingPipeline {
       timeZone: timeZone,
       userContext: userContext,
       additionalGaps: additionalGaps,
+      keyConceptsEnabled: keyConceptsEnabled,
+      flashcardLimit: flashcardLimit,
+      quizLimit: quizLimit,
     );
   }
 
@@ -58,6 +64,9 @@ class DurableRecordingPipeline {
     required String timeZone,
     String? userContext,
     List<TranscriptGap> additionalGaps = const [],
+    bool keyConceptsEnabled = false,
+    int flashcardLimit = 0,
+    int quizLimit = 0,
   }) =>
       _drainAndStructure(
         recordingId: recordingId,
@@ -65,6 +74,9 @@ class DurableRecordingPipeline {
         timeZone: timeZone,
         userContext: userContext,
         additionalGaps: additionalGaps,
+        keyConceptsEnabled: keyConceptsEnabled,
+        flashcardLimit: flashcardLimit,
+        quizLimit: quizLimit,
       );
 
   Stream<PipelineEvent> _drainAndStructure({
@@ -73,6 +85,9 @@ class DurableRecordingPipeline {
     required String timeZone,
     String? userContext,
     List<TranscriptGap> additionalGaps = const [],
+    bool keyConceptsEnabled = false,
+    int flashcardLimit = 0,
+    int quizLimit = 0,
   }) async* {
     final outbox = StreamController<PipelineEvent>();
 
@@ -121,8 +136,15 @@ class DurableRecordingPipeline {
           referenceDate: referenceDate,
           timeZone: timeZone,
           sttProviderName: queue.transcription.displayName,
-          diarizationAvailable: queue.transcription.capabilities.diarization,
+          // Whether this transcript actually carries speaker labels, not merely whether
+          // the provider is theoretically capable of them — the two can disagree because
+          // speaker labelling is requested per-recording, not fixed per provider.
+          diarizationAvailable:
+              transcript.segments.any((s) => s.speaker != null),
           userContext: userContext,
+          keyConceptsEnabled: keyConceptsEnabled,
+          flashcardLimit: flashcardLimit,
+          quizLimit: quizLimit,
         );
         outbox.add(PipelineComplete(transcript, outcome));
       } catch (e) {

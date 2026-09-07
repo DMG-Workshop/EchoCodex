@@ -29,6 +29,66 @@ void main() {
     expect(doc.toJson(), equals(json));
   });
 
+  group('study aids', () {
+    test('null (feature off) decodes to an empty list, never a crash', () {
+      final json = validNoteJson()
+        ..['keyConcepts'] = null
+        ..['flashcards'] = null
+        ..['quiz'] = null;
+
+      final doc = NoteDocument.fromJson(json);
+      expect(doc.keyConcepts, isEmpty);
+      expect(doc.flashcards, isEmpty);
+      expect(doc.quiz, isEmpty);
+    });
+
+    test('populated study aids round-trip through JSON', () {
+      final json = validNoteJson()
+        ..['keyConcepts'] = [
+          {
+            'term': 'OIDC',
+            'explanation': 'The protocol the new auth flow uses.'
+          }
+        ]
+        ..['flashcards'] = [
+          {
+            'front': 'What replaces the session store?',
+            'back': 'OIDC-based auth.'
+          }
+        ]
+        ..['quiz'] = [
+          {
+            'question': 'Who owns the migration?',
+            'choices': ['Priya', 'Sam', 'Nobody'],
+            'correctIndex': 0,
+            'explanation': 'Priya accepted it in the recording.',
+          }
+        ];
+
+      final doc = NoteDocument.fromJson(json);
+      expect(doc.keyConcepts.single.term, 'OIDC');
+      expect(doc.flashcards.single.back, 'OIDC-based auth.');
+      expect(doc.quiz.single.choices, ['Priya', 'Sam', 'Nobody']);
+      expect(doc.quiz.single.correctIndex, 0);
+      expect(doc.toJson(), equals(json));
+    });
+
+    test('an out-of-range correctIndex is clamped rather than trusted verbatim',
+        () {
+      final json = validNoteJson()
+        ..['quiz'] = [
+          {
+            'question': 'q',
+            'choices': ['a', 'b'],
+            'correctIndex': 99,
+            'explanation': null,
+          }
+        ];
+
+      expect(NoteDocument.fromJson(json).quiz.single.correctIndex, 1);
+    });
+  });
+
   test('an unrecognised enum value falls back rather than throwing', () {
     // A model that invents a status must not crash the note; the validator is what
     // rejects it, and by then the user still has their transcript.

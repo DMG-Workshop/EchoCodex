@@ -58,6 +58,36 @@ void main() {
     expect(provider.requests.single.userContent, startsWith('<transcript>'));
   });
 
+  test('study aids default to off, telling the model to return null', () async {
+    final provider =
+        FakeStructuringProvider(response: jsonEncode(validNoteJson()));
+    await run(provider);
+
+    final prompt = provider.requests.single.systemPrompt;
+    expect(prompt, contains('keyConcepts: Off. Return null.'));
+    expect(prompt, contains('flashcards: Off. Return null.'));
+    expect(prompt, contains('quiz: Off. Return null.'));
+  });
+
+  test('enabled study aids carry their limits into the prompt', () async {
+    final provider =
+        FakeStructuringProvider(response: jsonEncode(validNoteJson()));
+    await StructuringPipeline(provider: provider).run(
+      transcript: transcriptFixture(),
+      referenceDate: '2026-09-05',
+      timeZone: 'America/New_York',
+      sttProviderName: 'On-device',
+      keyConceptsEnabled: true,
+      flashcardLimit: 12,
+      quizLimit: 5,
+    );
+
+    final prompt = provider.requests.single.systemPrompt;
+    expect(prompt, contains('keyConcepts: On.'));
+    expect(prompt, contains('Up to 12 flashcards'));
+    expect(prompt, contains('Up to 5 multiple-choice questions'));
+  });
+
   group('repair loop', () {
     test('an invalid response is repaired without re-sending the transcript',
         () async {

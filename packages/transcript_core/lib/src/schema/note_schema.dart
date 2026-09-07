@@ -17,7 +17,7 @@ const String noteDocumentSchemaJson = r'''
   "description": "Canonical structured output produced from a transcript. Every LLM provider adapter must fill this exact shape. Written in the strict-mode-compatible subset: every property is listed in `required`, optionality is expressed as a nullable type union, and additionalProperties is false throughout.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["meta", "participants", "sections", "decisions", "openQuestions", "tasks", "risks", "timelineAnchors"],
+  "required": ["meta", "participants", "sections", "decisions", "openQuestions", "tasks", "risks", "timelineAnchors", "keyConcepts", "flashcards", "quiz"],
   "properties": {
     "meta": {
       "type": "object",
@@ -155,6 +155,47 @@ const String noteDocumentSchemaJson = r'''
           "sourceRef": { "$ref": "#/$defs/sourceRef" }
         }
       }
+    },
+    "keyConcepts": {
+      "type": ["array", "null"],
+      "description": "Study aid. The most important ideas or terms actually discussed, each with a one-line explanation. Null when the feature that requests this is turned off, or when the recording has nothing worth studying — never invented to fill a quota.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["term", "explanation"],
+        "properties": {
+          "term": { "type": "string" },
+          "explanation": { "type": "string" }
+        }
+      }
+    },
+    "flashcards": {
+      "type": ["array", "null"],
+      "description": "Study aid. Front/back flashcards drawn from material actually discussed. Null when the feature that requests this is turned off, or when none are warranted.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["front", "back"],
+        "properties": {
+          "front": { "type": "string", "description": "A question or term." },
+          "back": { "type": "string", "description": "The answer." }
+        }
+      }
+    },
+    "quiz": {
+      "type": ["array", "null"],
+      "description": "Study aid. Multiple-choice questions drawn from material actually discussed. Null when the feature that requests this is turned off, or when none are warranted.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["question", "choices", "correctIndex", "explanation"],
+        "properties": {
+          "question": { "type": "string" },
+          "choices": { "type": "array", "items": { "type": "string" }, "description": "3-5 options." },
+          "correctIndex": { "type": "integer", "description": "Index into choices of the correct answer." },
+          "explanation": { "type": ["string", "null"], "description": "Why that answer is correct, only if it adds something." }
+        }
+      }
     }
   },
   "$defs": {
@@ -180,4 +221,7 @@ Map<String, dynamic> get noteDocumentSchema =>
     _cached ??= json.decode(noteDocumentSchemaJson) as Map<String, dynamic>;
 
 /// Schema version, surfaced on every stored NoteDocument so old notes stay explainable.
-const String noteSchemaVersion = 'note-document/v1';
+///
+/// v2 adds keyConcepts, flashcards and quiz. Both versions of the JSON decode fine
+/// through [NoteDocument.fromJson] — a v1 note simply has empty study-aid lists.
+const String noteSchemaVersion = 'note-document/v2';

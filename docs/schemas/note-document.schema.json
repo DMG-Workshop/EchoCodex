@@ -13,7 +13,10 @@
     "openQuestions",
     "tasks",
     "risks",
-    "timelineAnchors"
+    "timelineAnchors",
+    "keyConcepts",
+    "flashcards",
+    "quiz"
   ],
   "properties": {
     "meta": {
@@ -390,6 +393,94 @@
           },
           "sourceRef": {
             "$ref": "#/$defs/sourceRef"
+          }
+        }
+      }
+    },
+    "keyConcepts": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "Study aid. The most important ideas or terms actually discussed, each with a one-line explanation. Null when the feature that requests this is turned off, or when the recording has nothing worth studying — never invented to fill a quota.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "term",
+          "explanation"
+        ],
+        "properties": {
+          "term": {
+            "type": "string"
+          },
+          "explanation": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "flashcards": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "Study aid. Front/back flashcards drawn from material actually discussed. Null when the feature that requests this is turned off, or when none are warranted.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "front",
+          "back"
+        ],
+        "properties": {
+          "front": {
+            "type": "string",
+            "description": "A question or term."
+          },
+          "back": {
+            "type": "string",
+            "description": "The answer."
+          }
+        }
+      }
+    },
+    "quiz": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "description": "Study aid. Multiple-choice questions drawn from material actually discussed. Null when the feature that requests this is turned off, or when none are warranted.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "question",
+          "choices",
+          "correctIndex",
+          "explanation"
+        ],
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "3-5 options."
+          },
+          "correctIndex": {
+            "type": "integer",
+            "description": "Index into choices of the correct answer."
+          },
+          "explanation": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why that answer is correct, only if it adds something."
           }
         }
       }

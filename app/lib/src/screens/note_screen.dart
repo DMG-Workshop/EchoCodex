@@ -83,7 +83,7 @@ class _NoteView extends ConsumerWidget {
     final note = decodeNote(recording);
 
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: Text(
@@ -115,6 +115,7 @@ class _NoteView extends ConsumerWidget {
               Tab(text: 'Notes'),
               Tab(text: 'Board'),
               Tab(text: 'Timeline'),
+              Tab(text: 'Study'),
               Tab(text: 'Transcript'),
             ],
           ),
@@ -125,6 +126,7 @@ class _NoteView extends ConsumerWidget {
                 _NotesTab(note: note, recording: recording),
                 BoardView(recordingId: recording.id, note: note),
                 TimelineView(recordingId: recording.id, note: note),
+                _StudyTab(note: note),
                 _TranscriptTab(note: note, recording: recording),
               ]),
       ),
@@ -227,6 +229,212 @@ class _NotesTab extends StatelessWidget {
         const SizedBox(height: 32),
         _Provenance(recording: recording),
       ],
+    );
+  }
+}
+
+/// Key concepts, flashcards and a quiz — the study aids, when any were generated.
+class _StudyTab extends StatelessWidget {
+  const _StudyTab({required this.note});
+
+  final NoteDocument note;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (note.keyConcepts.isEmpty && note.flashcards.isEmpty && note.quiz.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.school_outlined,
+                  size: 40, color: theme.colorScheme.onSurfaceVariant),
+              const SizedBox(height: 14),
+              Text('No study aids for this recording',
+                  style: theme.textTheme.titleMedium),
+              const SizedBox(height: 8),
+              Text(
+                'Turn on key concepts, flashcards or quizzes in Settings, then write '
+                'the notes again.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+      children: [
+        if (note.keyConcepts.isNotEmpty) ...[
+          Text('Key concepts', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (final concept in note.keyConcepts)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(concept.term,
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                  Text(concept.explanation, style: theme.textTheme.bodyMedium),
+                ],
+              ),
+            ),
+          const SizedBox(height: 20),
+        ],
+        if (note.flashcards.isNotEmpty) ...[
+          Text('Flashcards', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (final card in note.flashcards) _FlashcardTile(card: card),
+          const SizedBox(height: 20),
+        ],
+        if (note.quiz.isNotEmpty) ...[
+          Text('Quiz', style: theme.textTheme.titleMedium),
+          const SizedBox(height: 8),
+          for (var i = 0; i < note.quiz.length; i++)
+            _QuizTile(index: i + 1, question: note.quiz[i]),
+        ],
+      ],
+    );
+  }
+}
+
+class _FlashcardTile extends StatefulWidget {
+  const _FlashcardTile({required this.card});
+
+  final Flashcard card;
+
+  @override
+  State<_FlashcardTile> createState() => _FlashcardTileState();
+}
+
+class _FlashcardTileState extends State<_FlashcardTile> {
+  bool _revealed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: () => setState(() => _revealed = !_revealed),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _revealed ? widget.card.back : widget.card.front,
+                  style: theme.textTheme.bodyLarge,
+                ),
+              ),
+              Icon(_revealed ? Icons.visibility_off : Icons.visibility,
+                  color: theme.colorScheme.onSurfaceVariant, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuizTile extends StatefulWidget {
+  const _QuizTile({required this.index, required this.question});
+
+  final int index;
+  final QuizQuestion question;
+
+  @override
+  State<_QuizTile> createState() => _QuizTileState();
+}
+
+class _QuizTileState extends State<_QuizTile> {
+  int? _selected;
+  bool _checked = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final correct = widget.question.correctIndex;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('${widget.index}. ${widget.question.question}',
+                style: theme.textTheme.bodyLarge),
+            const SizedBox(height: 8),
+            RadioGroup<int>(
+              groupValue: _selected,
+              onChanged: _checked
+                  ? (_) {}
+                  : (v) => setState(() => _selected = v),
+              child: Column(
+                children: [
+                  for (var i = 0; i < widget.question.choices.length; i++)
+                    RadioListTile<int>(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: i,
+                      title: Text(
+                        widget.question.choices[i],
+                        style: _checked
+                            ? TextStyle(
+                                color: i == correct
+                                    ? theme.colorScheme.primary
+                                    : (i == _selected
+                                        ? theme.colorScheme.error
+                                        : null),
+                                fontWeight: i == correct
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                              )
+                            : null,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (!_checked)
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed:
+                      _selected == null ? null : () => setState(() => _checked = true),
+                  child: const Text('Check answer'),
+                ),
+              )
+            else ...[
+              const SizedBox(height: 4),
+              Text(
+                _selected == correct ? 'Correct.' : 'Not quite.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: _selected == correct
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.error,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (widget.question.explanation?.trim().isNotEmpty == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(widget.question.explanation!,
+                      style: theme.textTheme.bodySmall),
+                ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

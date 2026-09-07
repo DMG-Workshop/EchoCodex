@@ -6,7 +6,7 @@
 class StructuringPrompts {
   const StructuringPrompts._();
 
-  static const String promptVersion = 'structuring/2026-09-05';
+  static const String promptVersion = 'structuring/2026-09-07';
 
   /// Byte-stable for a given recording context, so it sits behind a prompt-cache
   /// breakpoint and the volatile transcript follows it.
@@ -17,6 +17,9 @@ class StructuringPrompts {
     required String sttProviderName,
     bool diarizationAvailable = false,
     String? userContext,
+    bool keyConceptsEnabled = false,
+    int flashcardLimit = 0,
+    int quizLimit = 0,
   }) =>
       '''
 You convert a raw audio transcript into a structured note document.
@@ -75,7 +78,15 @@ If a passage is too garbled to interpret, omit it rather than guessing, and set
 meta.extractionConfidence to "medium" or "low".
 
 DEDUPLICATION
-The same commitment restated three times is one task. Merge, and cite the clearest statement.''';
+The same commitment restated three times is one task. Merge, and cite the clearest statement.
+
+STUDY AIDS
+These three fields are study aids, not extractions: unlike the rest of this schema they
+carry no sourceRef, but they must still be grounded in what was actually said — never
+invented to fill a quota. Return null for a field whose feature is off below.
+- keyConcepts: ${keyConceptsEnabled ? 'On. Up to 8 of the most important ideas or terms actually discussed, each with a one-sentence explanation. Return null if there is nothing worth studying.' : 'Off. Return null.'}
+- flashcards: ${flashcardLimit > 0 ? 'On. Up to $flashcardLimit flashcards (front: a question or term, back: the answer) covering material actually discussed. Fewer is fine; return null only if none are warranted.' : 'Off. Return null.'}
+- quiz: ${quizLimit > 0 ? 'On. Up to $quizLimit multiple-choice questions (3-5 choices each, correctIndex pointing at the right one) testing material actually discussed. Fewer is fine; return null only if none are warranted.' : 'Off. Return null.'}''';
 
   /// Section-scoped extraction for transcripts too long for one pass.
   static String mapSection({

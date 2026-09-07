@@ -76,6 +76,38 @@ class NoteExporters {
       out.writeln();
     }
 
+    if (note.keyConcepts.isNotEmpty) {
+      out.writeln('## Key concepts');
+      for (final concept in note.keyConcepts) {
+        out.writeln('- **${concept.term}** — ${concept.explanation}');
+      }
+      out.writeln();
+    }
+
+    if (note.flashcards.isNotEmpty) {
+      out.writeln('## Flashcards');
+      for (final card in note.flashcards) {
+        out.writeln('- **Q:** ${card.front}');
+        out.writeln('  **A:** ${card.back}');
+      }
+      out.writeln();
+    }
+
+    if (note.quiz.isNotEmpty) {
+      out.writeln('## Quiz');
+      for (final q in note.quiz) {
+        out.writeln('- ${q.question}');
+        for (var i = 0; i < q.choices.length; i++) {
+          final marker = i == q.correctIndex ? 'x' : ' ';
+          out.writeln('  - [$marker] ${q.choices[i]}');
+        }
+        if (q.explanation?.trim().isNotEmpty == true) {
+          out.writeln('  > ${q.explanation}');
+        }
+      }
+      out.writeln();
+    }
+
     return out.toString().trimRight();
   }
 

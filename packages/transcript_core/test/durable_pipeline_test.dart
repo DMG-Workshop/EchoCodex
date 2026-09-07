@@ -114,6 +114,60 @@ void main() {
     );
   });
 
+  test(
+      'diarization is reported to structuring only when the transcript '
+      'actually carries speaker labels, not merely because the provider could',
+      () async {
+    final structuring = FakeStructuringProvider(
+      response: jsonEncode(validNoteJson()),
+    );
+    await collect(DurableRecordingPipeline(
+      queue: ChunkQueue(
+        store: MemoryStore(),
+        transcription: Speech(),
+        audio: StubAudio(),
+      ),
+      structuring: StructuringPipeline(provider: structuring),
+    ).start(
+      recordingId: 'r1',
+      totalDurationMs: 45000,
+      silences: const [],
+      referenceDate: '2026-09-05',
+      timeZone: 'UTC',
+    ));
+
+    expect(structuring.requests.single.systemPrompt,
+        contains('diarization unavailable'));
+  });
+
+  test('study aid settings reach the structuring prompt', () async {
+    final structuring = FakeStructuringProvider(
+      response: jsonEncode(validNoteJson()),
+    );
+    await collect(DurableRecordingPipeline(
+      queue: ChunkQueue(
+        store: MemoryStore(),
+        transcription: Speech(),
+        audio: StubAudio(),
+      ),
+      structuring: StructuringPipeline(provider: structuring),
+    ).start(
+      recordingId: 'r1',
+      totalDurationMs: 45000,
+      silences: const [],
+      referenceDate: '2026-09-05',
+      timeZone: 'UTC',
+      keyConceptsEnabled: true,
+      flashcardLimit: 8,
+      quizLimit: 3,
+    ));
+
+    final prompt = structuring.requests.single.systemPrompt;
+    expect(prompt, contains('keyConcepts: On.'));
+    expect(prompt, contains('Up to 8 flashcards'));
+    expect(prompt, contains('Up to 3 multiple-choice questions'));
+  });
+
   test('progress reaches the total before structuring begins', () async {
     final events = await collect(pipelineOf(MemoryStore(), Speech()).start(
       recordingId: 'r1',

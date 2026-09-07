@@ -69,6 +69,45 @@ void main() {
           contains('we are retiring it before launch, agreed'));
     });
 
+    test('study aids are omitted from the export when there are none', () {
+      final md = NoteExporters.markdown(note);
+      expect(md, isNot(contains('## Key concepts')));
+      expect(md, isNot(contains('## Flashcards')));
+      expect(md, isNot(contains('## Quiz')));
+    });
+
+    test('study aids render when present', () {
+      final withAids = NoteDocument.fromJson(validNoteJson()
+        ..['keyConcepts'] = [
+          {'term': 'OIDC', 'explanation': 'The protocol the new flow uses.'}
+        ]
+        ..['flashcards'] = [
+          {
+            'front': 'What replaces the session store?',
+            'back': 'OIDC-based auth.'
+          }
+        ]
+        ..['quiz'] = [
+          {
+            'question': 'Who owns the migration?',
+            'choices': ['Priya', 'Sam'],
+            'correctIndex': 0,
+            'explanation': 'Priya accepted it.',
+          }
+        ]);
+
+      final md = NoteExporters.markdown(withAids);
+      expect(md, contains('## Key concepts'));
+      expect(md, contains('**OIDC** — The protocol the new flow uses.'));
+      expect(md, contains('## Flashcards'));
+      expect(md, contains('**Q:** What replaces the session store?'));
+      expect(md, contains('**A:** OIDC-based auth.'));
+      expect(md, contains('## Quiz'));
+      expect(md, contains('- [x] Priya'));
+      expect(md, contains('- [ ] Sam'));
+      expect(md, contains('> Priya accepted it.'));
+    });
+
     test('unclear audio is flagged in the export too', () {
       final unclear = validNoteJson();
       (unclear['meta'] as Map<String, dynamic>)['extractionConfidence'] = 'low';

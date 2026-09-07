@@ -45,6 +45,9 @@ class StructuringPipeline {
     required String sttProviderName,
     bool diarizationAvailable = false,
     String? userContext,
+    bool keyConceptsEnabled = false,
+    int flashcardLimit = 0,
+    int quizLimit = 0,
     void Function(StructureProgress)? onProgress,
   }) async {
     if (transcript.isEmpty) {
@@ -61,6 +64,9 @@ class StructuringPipeline {
       sttProviderName: sttProviderName,
       diarizationAvailable: diarizationAvailable,
       userContext: userContext,
+      keyConceptsEnabled: keyConceptsEnabled,
+      flashcardLimit: flashcardLimit,
+      quizLimit: quizLimit,
     );
 
     return fitsSinglePass(transcript)
