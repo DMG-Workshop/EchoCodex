@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:transcript_core/transcript_core.dart';
 
 import '../data/chunk_store.dart';
@@ -10,6 +11,7 @@ import '../data/repository.dart';
 import '../settings/provider_config.dart';
 import 'audio_import.dart';
 import 'background_audio.dart';
+import 'device_audio_capture.dart';
 import 'shared_file.dart';
 import 'interruption_policy.dart';
 import 'on_device_stt.dart';
@@ -24,16 +26,24 @@ class RecordIdle extends RecordState {
   const RecordIdle();
 }
 
+/// Where the audio being captured is coming from.
+///
+/// The two are stopped by different code paths and cannot be told apart from elapsed time
+/// alone, so the state carries it rather than the UI guessing.
+enum RecordSource { microphone, deviceAudio }
+
 class RecordActive extends RecordState {
   const RecordActive({
     required this.elapsed,
     this.liveText = '',
     this.interrupted = false,
     this.interruptionReason,
+    this.source = RecordSource.microphone,
   });
 
   final Duration elapsed;
   final String liveText;
+  final RecordSource source;
 
   /// The OS took the microphone. Recording is still open and will resume.
   final bool interrupted;
@@ -70,8 +80,10 @@ class RecordingController extends StateNotifier<RecordState> {
     required TranscriptDatabase database,
     required BackgroundAudio background,
     AudioImportService importer = const AudioImportService(),
+    DeviceAudioCapture deviceCapture = const DeviceAudioCapture(),
     this.interruptions = const InterruptionPolicy(),
   })  : _recorder = recorder,
+        _deviceCapture = deviceCapture,
         _repository = repository,
         _factory = factory,
         _settings = settings,
@@ -87,7 +99,12 @@ class RecordingController extends StateNotifier<RecordState> {
   final TranscriptDatabase _db;
   final BackgroundAudio _background;
   final AudioImportService _importer;
+  final DeviceAudioCapture _deviceCapture;
   final InterruptionPolicy interruptions;
+
+  /// When the current device-playback capture began, or null when none is running. The
+  /// recorder's own clock does not apply — the microphone is not involved.
+  DateTime? _deviceCaptureStartedAt;
 
   LiveTranscriptionAdapter? _live;
   StreamSubscription<AudioInterruption>? _interruptionSub;
@@ -107,6 +124,105 @@ class RecordingController extends StateNotifier<RecordState> {
         for (final w in _windows)
           if (!w.isOpen) TranscriptGap(w.startMs, w.endMs!, w.label),
       ];
+
+  /// Records what the device is playing instead of what the microphone hears — a webinar
+  /// or a lecture the user is listening to.
+  ///
+  /// Android only, and only for media playback: call audio is withheld by the platform,
+  /// which is why a capture that comes back silent says so specifically rather than
+  /// producing an empty note.
+  Future<void> startDeviceCapture() async {
+    final transcriptionKind = _settings.kindFor(ProviderStage.transcription) ??
+        SettingsStore.defaultTranscription;
+    if (transcriptionKind == ProviderKind.onDeviceStt) {
+      state = const RecordError(
+        'On-device recognition cannot transcribe device audio.',
+        remedy: 'It listens to the microphone. For this, choose Whisper (offline) '
+            'in Settings — it also needs no key.',
+      );
+      return;
+    }
+
+    final location =
+        await resolveRecordingsDirectory(_settings.recordingsDirPath);
+    final path = p.join(
+      location.directory.path,
+      'device_${DateTime.now().millisecondsSinceEpoch}.wav',
+    );
+
+    try {
+      await _deviceCapture.start(targetPath: path);
+    } on DeviceAudioCaptureException catch (e) {
+      state = RecordError(e.message, remedy: e.remedy);
+      return;
+    }
+
+    _deviceCaptureStartedAt = DateTime.now();
+    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (state is RecordActive || state is RecordIdle) {
+        state = RecordActive(
+          elapsed: _deviceCaptureElapsed,
+          source: RecordSource.deviceAudio,
+        );
+      }
+    });
+    state = const RecordActive(
+      elapsed: Duration.zero,
+      source: RecordSource.deviceAudio,
+    );
+  }
+
+  /// Stops a device capture and runs what was captured through the usual pipeline.
+  Future<void> stopDeviceCapture() async {
+    _ticker?.cancel();
+    _ticker = null;
+
+    final duration = _deviceCaptureElapsed;
+    _deviceCaptureStartedAt = null;
+
+    state = const RecordProcessing(label: 'Preparing');
+
+    final String path;
+    try {
+      path = await _deviceCapture.stop();
+    } on DeviceAudioCaptureException catch (e) {
+      state = RecordError(e.message, remedy: e.remedy);
+      return;
+    }
+
+    final providers = await _resolveProviders(null);
+    if (providers == null) return; // state already set to an error
+
+    final recordingId = await _repository.createRecording(
+      path: path,
+      duration: duration,
+      transcriptionProviderId: providers.transcription.id.value,
+      structuringProviderId: providers.structuring.id.value,
+    );
+
+    await _consume(
+      _pipelineFor(providers, path).start(
+        recordingId: recordingId,
+        totalDurationMs: duration.inMilliseconds,
+        // Device capture keeps no loudness history, so the planner cuts on its fixed
+        // boundaries with overlap rather than at pauses.
+        silences: const [],
+        referenceDate: _isoDate(DateTime.now()),
+        timeZone: DateTime.now().timeZoneName,
+        userContext: _settings.customVocabulary.isEmpty
+            ? null
+            : 'Custom vocabulary: ${_settings.customVocabulary}',
+        keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
+        flashcardLimit: _flashcardLimit,
+        quizLimit: _quizLimit,
+      ),
+      recordingId,
+    );
+  }
+
+  Duration get _deviceCaptureElapsed => _deviceCaptureStartedAt == null
+      ? Duration.zero
+      : DateTime.now().difference(_deviceCaptureStartedAt!);
 
   Future<void> startRecording() async {
     try {
@@ -580,6 +696,15 @@ final sharedFilesProvider = Provider<SharedFiles>((ref) {
   ref.onDispose(shared.dispose);
   return shared;
 });
+
+final deviceAudioCaptureProvider =
+    Provider<DeviceAudioCapture>((ref) => const DeviceAudioCapture());
+
+/// Whether this device can record its own playback at all: Android 10 or newer, and
+/// never iOS. Asked once rather than on every rebuild.
+final deviceAudioSupportedProvider = FutureProvider<bool>(
+  (ref) => ref.watch(deviceAudioCaptureProvider).isSupported,
+);
 
 final recordingsProvider = StreamProvider<List<Recording>>(
   (ref) => ref.watch(repositoryProvider).watchAll(),

@@ -9,6 +9,10 @@
          in the Play Console, or the service cannot start. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Recording what the device is playing (a webinar, a lecture), which Android runs
+         through a media projection. Android 14+ refuses the projection unless a foreground
+         service of exactly this type is already running. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
@@ -62,6 +66,14 @@
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="microphone"
+            android:exported="false" />
+
+        <!-- Capturing device playback. Separate from the microphone service above because
+             the platform types are mutually exclusive per service, and this one captures
+             what is playing rather than what is being said. -->
+        <service
+            android:name=".DeviceAudioCaptureService"
+            android:foregroundServiceType="mediaProjection"
             android:exported="false" />
 
         <meta-data

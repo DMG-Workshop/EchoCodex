@@ -122,6 +122,16 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
         ),
       ),
       floatingActionButton: switch (state) {
+        // Stopping goes to whichever capture is actually running: the two are torn down
+        // by different paths, and the microphone one would leave the projection open.
+        RecordActive(source: RecordSource.deviceAudio) =>
+          FloatingActionButton.large(
+            onPressed: () => ref
+                .read(recordingControllerProvider.notifier)
+                .stopDeviceCapture(),
+            tooltip: 'Stop and write notes',
+            child: const Icon(Icons.stop),
+          ),
         RecordActive() => FloatingActionButton.large(
             onPressed: () =>
                 ref.read(recordingControllerProvider.notifier).stopAndProcess(),
@@ -129,13 +139,51 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
             child: const Icon(Icons.stop),
           ),
         RecordProcessing() => null,
-        _ => FloatingActionButton.large(
-            onPressed: () =>
-                ref.read(recordingControllerProvider.notifier).startRecording(),
-            tooltip: 'Start recording',
-            child: const Icon(Icons.mic),
+        _ => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              const DeviceAudioButton(),
+              FloatingActionButton.large(
+                onPressed: () => ref
+                    .read(recordingControllerProvider.notifier)
+                    .startRecording(),
+                tooltip: 'Start recording',
+                child: const Icon(Icons.mic),
+              ),
+            ],
           ),
       },
+    );
+  }
+}
+
+/// Starts a recording of what the device is playing, when the platform allows it.
+///
+/// Hidden rather than disabled where it cannot work — iOS has no such API, and Android
+/// below 10 lacks playback capture — because a permanently dead control is worse than an
+/// absent one. It is a secondary action: the microphone is what most recordings are.
+class DeviceAudioButton extends ConsumerWidget {
+  const DeviceAudioButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled =
+        ref.watch(settingsStoreProvider).workflowEnabled('deviceAudioCapture');
+    if (!enabled) return const SizedBox.shrink();
+
+    final supported = ref.watch(deviceAudioSupportedProvider).valueOrNull;
+    if (supported != true) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: FloatingActionButton.small(
+        heroTag: 'device-audio',
+        onPressed: () =>
+            ref.read(recordingControllerProvider.notifier).startDeviceCapture(),
+        tooltip: 'Record what this device is playing',
+        child: const Icon(Icons.speaker),
+      ),
     );
   }
 }

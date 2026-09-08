@@ -61,7 +61,8 @@ class SharedFilePlugin(
     fun handleIntent(intent: Intent?): Boolean {
         val incoming = intent ?: return false
         val uri = when (incoming.action) {
-            Intent.ACTION_SEND -> incoming.getParcelableExtraCompat(Intent.EXTRA_STREAM)
+            Intent.ACTION_SEND ->
+                incoming.getParcelableExtraCompat<Uri>(Intent.EXTRA_STREAM)
             Intent.ACTION_VIEW -> incoming.data
             else -> null
         } ?: return false
@@ -119,12 +120,3 @@ class SharedFilePlugin(
         return if (fromMime.isNullOrEmpty()) "" else ".$fromMime"
     }
 }
-
-/** `getParcelableExtra` is deprecated from API 33; this keeps one call site for both. */
-@Suppress("DEPRECATION")
-private fun Intent.getParcelableExtraCompat(key: String): Uri? =
-    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-        getParcelableExtra(key, Uri::class.java)
-    } else {
-        getParcelableExtra(key)
-    }
