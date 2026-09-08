@@ -1,7 +1,7 @@
 name: transcript_app
-description: Transcript — record, transcribe with your own AI, and structure into notes.
+description: Echo Codex — record, transcribe with your own AI, and structure into notes.
 publish_to: none
-version: 0.1.0+1
+version: 0.5.2a+1
 
 environment:
   sdk: ^3.5.0
