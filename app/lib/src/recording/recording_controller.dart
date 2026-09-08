@@ -10,6 +10,7 @@ import '../data/repository.dart';
 import '../settings/provider_config.dart';
 import 'audio_import.dart';
 import 'background_audio.dart';
+import 'shared_file.dart';
 import 'interruption_policy.dart';
 import 'on_device_stt.dart';
 import 'recorder_service.dart';
@@ -570,6 +571,14 @@ final backgroundAudioProvider = Provider<BackgroundAudio>((ref) {
   final background = BackgroundAudio();
   ref.onDispose(background.dispose);
   return background;
+});
+
+/// Files handed in from a share sheet or "Open with". Overridden in tests, which have no
+/// platform channel behind them.
+final sharedFilesProvider = Provider<SharedFiles>((ref) {
+  final shared = SharedFiles();
+  ref.onDispose(shared.dispose);
+  return shared;
 });
 
 final recordingsProvider = StreamProvider<List<Recording>>(

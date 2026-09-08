@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,6 +19,7 @@ class RecordScreen extends ConsumerStatefulWidget {
 
 class _RecordScreenState extends ConsumerState<RecordScreen> {
   final List<double> _levels = [];
+  StreamSubscription<String>? _sharedFiles;
 
   @override
   void initState() {
@@ -24,8 +27,20 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
 
     // Anything the OS killed mid-meeting resumes now, before the user has done
     // anything. They open the app and their notes are already being written.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(recordingControllerProvider.notifier).resumeUnfinished();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final controller = ref.read(recordingControllerProvider.notifier);
+      await controller.resumeUnfinished();
+
+      // A file shared into the app while it was closed: the platform held it until Dart
+      // existed to be told. Handled after the resume so a recording interrupted
+      // mid-meeting still takes priority over a file that can wait.
+      final shared = await ref.read(sharedFilesProvider).take();
+      if (shared != null) await controller.importRecording(shared);
+    });
+
+    // And files shared while the app is already open.
+    _sharedFiles = ref.read(sharedFilesProvider).files.listen((path) {
+      ref.read(recordingControllerProvider.notifier).importRecording(path);
     });
 
     ref.read(recorderProvider).levels.listen((level) {
@@ -36,6 +51,12 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
         if (_levels.length > 2000) _levels.removeRange(0, 500);
       });
     });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_sharedFiles?.cancel());
+    super.dispose();
   }
 
   /// Settings has no change stream, so whether the note-writing stage is configured is
