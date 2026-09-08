@@ -63,6 +63,18 @@ async function importEchoCodexNote(raw) {
     }
 
     await JournalEntry.create({ name: title, pages, flags: { [MODULE_ID]: { source: "Echo Codex" } } });
+    for (const participant of document.participants ?? []) {
+      const name = participant.displayName ?? participant.id;
+      if (!name) continue;
+      const existing = game.actors?.find(actor => actor.getFlag(MODULE_ID, "participantId") === participant.id);
+      if (!existing) {
+        await Actor.create({
+          name,
+          type: "npc",
+          flags: { [MODULE_ID]: { participantId: participant.id, source: "Echo Codex" } }
+        });
+      }
+    }
     ui.notifications.info(`Imported ${title} into a Journal Entry.`);
   } catch (error) {
     console.error(`${MODULE_ID} | Import failed`, error);

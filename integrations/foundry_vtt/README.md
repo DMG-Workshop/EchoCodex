@@ -6,6 +6,9 @@ This first module version imports an Echo Codex JSON export into a Foundry Journ
 It creates pages for the summary, notes, campaign actions, and transcript when those fields
 are present.
 
+Participants are also created as lightweight NPC actors, tagged with their Echo Codex
+participant id so repeated imports do not duplicate them.
+
 ## Install during development
 
 1. Copy this module into your Foundry `Data/modules/echo-codex-notes` directory.
