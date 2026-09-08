@@ -125,18 +125,19 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
         // Stopping goes to whichever capture is actually running: the two are torn down
         // by different paths, and the microphone one would leave the projection open.
         RecordActive(source: RecordSource.deviceAudio) =>
-          FloatingActionButton.large(
-            onPressed: () => ref
+          _RecordingControls(
+            onStop: () => ref
                 .read(recordingControllerProvider.notifier)
                 .stopDeviceCapture(),
-            tooltip: 'Stop and write notes',
-            child: const Icon(Icons.stop),
+            onCancel: () => ref
+                .read(recordingControllerProvider.notifier)
+                .cancelRecording(),
           ),
-        RecordActive() => FloatingActionButton.large(
-            onPressed: () =>
+        RecordActive() => _RecordingControls(
+            onStop: () =>
                 ref.read(recordingControllerProvider.notifier).stopAndProcess(),
-            tooltip: 'Stop and write notes',
-            child: const Icon(Icons.stop),
+            onCancel: () =>
+                ref.read(recordingControllerProvider.notifier).cancelRecording(),
           ),
         RecordProcessing() => null,
         _ => Column(
@@ -184,6 +185,40 @@ class DeviceAudioButton extends ConsumerWidget {
         tooltip: 'Record what this device is playing',
         child: const Icon(Icons.speaker),
       ),
+    );
+  }
+}
+
+class _RecordingControls extends StatelessWidget {
+  const _RecordingControls({
+    required this.onStop,
+    required this.onCancel,
+  });
+
+  final VoidCallback onStop;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        FloatingActionButton.small(
+          heroTag: 'cancel-recording',
+          backgroundColor: Theme.of(context).colorScheme.error,
+          foregroundColor: Theme.of(context).colorScheme.onError,
+          onPressed: onCancel,
+          tooltip: 'Cancel recording and discard',
+          child: const Icon(Icons.close),
+        ),
+        const SizedBox(height: 12),
+        FloatingActionButton.large(
+          onPressed: onStop,
+          tooltip: 'Stop recording',
+          child: const Icon(Icons.stop),
+        ),
+      ],
     );
   }
 }
