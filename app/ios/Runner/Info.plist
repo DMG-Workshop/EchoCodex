@@ -104,5 +104,39 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+
+	<!-- Puts KallaNotes in the share sheet and the "Open with" list for recordings, so a
+	     meeting exported from Zoom or a voice memo from another app can be sent straight
+	     here instead of being found again through the picker. The audio and movie types
+	     are the umbrella UTIs; the specific ones are listed because not every app tags a
+	     file with the umbrella. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Recording</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.audio</string>
+				<string>public.mp3</string>
+				<string>public.mpeg-4-audio</string>
+				<string>com.microsoft.waveform-audio</string>
+				<string>org.xiph.flac</string>
+				<string>org.xiph.ogg-audio</string>
+				<string>public.aac-audio</string>
+				<string>public.movie</string>
+				<string>public.mpeg-4</string>
+				<string>com.apple.quicktime-movie</string>
+			</array>
+		</dict>
+	</array>
+	<!-- The file is copied into our own cache on arrival, so it is never edited in place
+	     and the user's original is left where it was. -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
 </dict>
 </plist>

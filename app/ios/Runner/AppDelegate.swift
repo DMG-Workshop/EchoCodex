@@ -20,5 +20,10 @@ import UIKit
     {
       AudioDecoderPlugin.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(
+      forPlugin: "SharedFilePlugin")
+    {
+      SharedFilePlugin.register(with: registrar)
+    }
   }
 }
