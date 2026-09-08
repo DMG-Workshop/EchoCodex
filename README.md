@@ -1,7 +1,7 @@
-# KallaNotes
+# Echo Codex
 
 A cross-platform (iOS + Android) recorder that turns speech into structured, actionable
-notes — bulleted summaries, action items, Kanban boards and timelines — using **your own AI**.
+notes — bulleted summaries, action items, Gnatt board and timelines — using **your own AI**.
 
 Bring your own API key (Anthropic, OpenAI, Google), or point the app at a local model
 running on your own machine via Ollama or LM Studio. There is no backend: the device talks
