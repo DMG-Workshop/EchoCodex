@@ -5,11 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:transcript_app/src/settings/connection_test_controller.dart';
-import 'package:transcript_app/src/settings/provider_config.dart';
-import 'package:transcript_app/src/settings/secure_key_store.dart';
-import 'package:transcript_app/src/recording/recording_controller.dart';
-import 'package:transcript_app/src/settings/settings_screen.dart';
+import 'package:echo_codex_app/src/settings/connection_test_controller.dart';
+import 'package:echo_codex_app/src/settings/provider_config.dart';
+import 'package:echo_codex_app/src/settings/secure_key_store.dart';
+import 'package:echo_codex_app/src/recording/recording_controller.dart';
+import 'package:echo_codex_app/src/settings/settings_screen.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 void main() {

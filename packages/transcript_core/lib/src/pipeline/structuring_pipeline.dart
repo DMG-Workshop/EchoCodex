@@ -45,6 +45,7 @@ class StructuringPipeline {
     required String sttProviderName,
     bool diarizationAvailable = false,
     String? userContext,
+    String? templateInstructions,
     bool keyConceptsEnabled = false,
     int flashcardLimit = 0,
     int quizLimit = 0,
@@ -63,7 +64,17 @@ class StructuringPipeline {
       durationHuman: _humanDuration(transcript.durationMs),
       sttProviderName: sttProviderName,
       diarizationAvailable: diarizationAvailable,
-      userContext: userContext,
+      userContext: [
+        if (userContext?.trim().isNotEmpty == true) userContext!.trim(),
+        if (templateInstructions?.trim().isNotEmpty == true)
+          'Note template instructions:\n${templateInstructions!.trim()}',
+      ].join('\n\n').trim().isEmpty
+          ? null
+          : [
+              if (userContext?.trim().isNotEmpty == true) userContext!.trim(),
+              if (templateInstructions?.trim().isNotEmpty == true)
+                'Note template instructions:\n${templateInstructions!.trim()}',
+            ].join('\n\n'),
       keyConceptsEnabled: keyConceptsEnabled,
       flashcardLimit: flashcardLimit,
       quizLimit: quizLimit,

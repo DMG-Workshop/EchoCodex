@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/recording/device_audio_capture.dart';
+import 'package:echo_codex_app/src/recording/device_audio_capture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

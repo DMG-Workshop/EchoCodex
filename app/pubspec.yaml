@@ -1,7 +1,7 @@
-name: transcript_app
+name: echo_codex_app
 description: Echo Codex — record, transcribe with your own AI, and structure into notes.
 publish_to: none
-version: 0.5.2a+1
+version: 0.5.2-alpha.1+1
 
 environment:
   sdk: ^3.5.0
@@ -44,8 +44,11 @@ dependencies:
   flutter_foreground_task: ^9.2.2
   share_plus: ^12.0.2
   crypto: ^3.0.7
+  encrypt: ^5.0.3
   pdf: ^3.11.3
   archive: ^4.0.7
+  flutter_local_notifications: ^19.0.0
+  timezone: ^0.10.0
 
   # The app version in a crash report. A report that does not say which build produced
   # it is close to useless for triage, and reading it from the bundle beats a constant

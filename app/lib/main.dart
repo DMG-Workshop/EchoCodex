@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'src/onboarding/onboarding_screen.dart';
 import 'src/privacy/crash_log.dart';
 import 'src/recording/recording_controller.dart';
+import 'src/recording/reminder_service.dart';
 import 'src/screens/record_screen.dart';
 import 'src/settings/provider_config.dart';
 
@@ -19,28 +20,31 @@ Future<void> main() async {
   // Settings are needed before the first frame — which provider to use is not something
   // to discover halfway through a recording.
   final prefs = await SharedPreferences.getInstance();
+  final reminders = ReminderService();
+  await reminders.initialize();
 
   runApp(
     ProviderScope(
       overrides: [
         settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
         diagnosticsProvider.overrideWithValue(diagnostics),
+        reminderServiceProvider.overrideWithValue(reminders),
       ],
-      child: const TranscriptApp(),
+      child: const EchoCodexApp(),
     ),
   );
 }
 
-class TranscriptApp extends ConsumerStatefulWidget {
-  const TranscriptApp({super.key});
+class EchoCodexApp extends ConsumerStatefulWidget {
+  const EchoCodexApp({super.key});
 
   static const Color _seed = Color(0xFF0B6A6A);
 
   @override
-  ConsumerState<TranscriptApp> createState() => _TranscriptAppState();
+  ConsumerState<EchoCodexApp> createState() => _EchoCodexAppState();
 }
 
-class _TranscriptAppState extends ConsumerState<TranscriptApp> {
+class _EchoCodexAppState extends ConsumerState<EchoCodexApp> {
   late bool _needsOnboarding = !ref.read(settingsStoreProvider).hasOnboarded;
 
   Future<void> _finishOnboarding() async {
@@ -51,15 +55,15 @@ class _TranscriptAppState extends ConsumerState<TranscriptApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'KallaNotes',
+      title: 'Echo Codex',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorSchemeSeed: TranscriptApp._seed,
+        colorSchemeSeed: EchoCodexApp._seed,
         brightness: Brightness.light,
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
-        colorSchemeSeed: TranscriptApp._seed,
+        colorSchemeSeed: EchoCodexApp._seed,
         brightness: Brightness.dark,
         useMaterial3: true,
       ),

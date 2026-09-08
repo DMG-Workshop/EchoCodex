@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/recording/recording_controller.dart';
-import 'package:transcript_app/src/screens/export_sheet.dart';
-import 'package:transcript_app/src/screens/note_screen.dart';
-import 'package:transcript_app/src/screens/timeline_view.dart';
+import 'package:echo_codex_app/src/recording/recording_controller.dart';
+import 'package:echo_codex_app/src/screens/export_sheet.dart';
+import 'package:echo_codex_app/src/screens/note_screen.dart';
+import 'package:echo_codex_app/src/screens/timeline_view.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 import 'fixtures.dart';
@@ -42,7 +42,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Timeline'));
+    await tester.tap(find.text('Gantt'));
     await tester.pumpAndSettle();
   }
 
@@ -140,7 +140,7 @@ void main() {
     expect(find.text('Markdown'), findsOneWidget);
     expect(find.text('Spreadsheet (CSV)'), findsOneWidget);
     expect(find.text('Jira CSV'), findsOneWidget);
-    expect(find.text('Calendar (.ics)'), findsOneWidget);
+    expect(find.text('Add to phone calendar (.ics)'), findsOneWidget);
     expect(find.textContaining('was inferred from the recording'), findsOneWidget,
         reason: 'the warning has to survive the trip out of the app');
   });

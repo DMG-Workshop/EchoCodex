@@ -6,6 +6,9 @@ analyzer:
     - build/**
     - android/**
     - ios/**
+    - linux/**
+    - windows/**
+    - macos/**
   language:
     strict-casts: true
 

@@ -16,6 +16,7 @@ import 'shared_file.dart';
 import 'interruption_policy.dart';
 import 'on_device_stt.dart';
 import 'recorder_service.dart';
+import 'reminder_service.dart';
 
 /// What the record screen is showing.
 sealed class RecordState {
@@ -111,6 +112,11 @@ class RecordingController extends StateNotifier<RecordState> {
   Timer? _ticker;
   String _liveText = '';
   bool _paused = false;
+  bool _localOnly = false;
+
+  bool get localOnly => _localOnly;
+
+  void setLocalOnly(bool value) => _localOnly = value;
 
   final List<InterruptionWindow> _windows = [];
 
@@ -137,7 +143,8 @@ class RecordingController extends StateNotifier<RecordState> {
     if (transcriptionKind == ProviderKind.onDeviceStt) {
       state = const RecordError(
         'On-device recognition cannot transcribe device audio.',
-        remedy: 'It listens to the microphone. For this, choose Whisper (offline) '
+        remedy:
+            'It listens to the microphone. For this, choose Whisper (offline) '
             'in Settings — it also needs no key.',
       );
       return;
@@ -190,7 +197,7 @@ class RecordingController extends StateNotifier<RecordState> {
       return;
     }
 
-    final providers = await _resolveProviders(null);
+    final providers = await _resolveProviders(null, localOnly: _localOnly);
     if (providers == null) return; // state already set to an error
 
     final recordingId = await _repository.createRecording(
@@ -198,8 +205,10 @@ class RecordingController extends StateNotifier<RecordState> {
       duration: duration,
       transcriptionProviderId: providers.transcription.id.value,
       structuringProviderId: providers.structuring.id.value,
+      localOnly: _localOnly,
     );
 
+    final templateInstructions = await _activeTemplateInstructions();
     await _consume(
       _pipelineFor(providers, path).start(
         recordingId: recordingId,
@@ -212,6 +221,7 @@ class RecordingController extends StateNotifier<RecordState> {
         userContext: _settings.customVocabulary.isEmpty
             ? null
             : 'Custom vocabulary: ${_settings.customVocabulary}',
+        templateInstructions: templateInstructions,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
         flashcardLimit: _flashcardLimit,
         quizLimit: _quizLimit,
@@ -351,7 +361,7 @@ class RecordingController extends StateNotifier<RecordState> {
 
     state = const RecordProcessing(label: 'Preparing');
 
-    final providers = await _resolveProviders(live);
+    final providers = await _resolveProviders(live, localOnly: _localOnly);
     if (providers == null) return; // state already set to an error
 
     final recordingId = await _repository.createRecording(
@@ -359,6 +369,7 @@ class RecordingController extends StateNotifier<RecordState> {
       duration: captured.duration,
       transcriptionProviderId: providers.transcription.id.value,
       structuringProviderId: providers.structuring.id.value,
+      localOnly: _localOnly,
     );
 
     if (liveTranscript != null) {
@@ -369,6 +380,7 @@ class RecordingController extends StateNotifier<RecordState> {
       );
     }
 
+    final templateInstructions = await _activeTemplateInstructions();
     await _consume(
       _pipelineFor(providers, captured.path).start(
         recordingId: recordingId,
@@ -379,6 +391,7 @@ class RecordingController extends StateNotifier<RecordState> {
         userContext: _settings.customVocabulary.isEmpty
             ? null
             : 'Custom vocabulary: ${_settings.customVocabulary}',
+        templateInstructions: templateInstructions,
         additionalGaps: interruptionGaps,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
         flashcardLimit: _flashcardLimit,
@@ -399,7 +412,8 @@ class RecordingController extends StateNotifier<RecordState> {
     if (format == null) {
       state = RecordError(
         'That file type cannot be imported.',
-        remedy: 'Supported: ${ImportFormat.values.map((f) => f.label).join(', ')}.',
+        remedy:
+            'Supported: ${ImportFormat.values.map((f) => f.label).join(', ')}.',
       );
       return;
     }
@@ -423,7 +437,8 @@ class RecordingController extends StateNotifier<RecordState> {
     if (transcriptionKind == ProviderKind.onDeviceStt) {
       state = const RecordError(
         'On-device recognition cannot transcribe a file.',
-        remedy: 'It listens to the microphone as you speak. For imports, choose '
+        remedy:
+            'It listens to the microphone as you speak. For imports, choose '
             'Whisper (offline) in Settings — it also needs no key.',
       );
       return;
@@ -431,7 +446,7 @@ class RecordingController extends StateNotifier<RecordState> {
 
     state = const RecordProcessing(label: 'Importing');
 
-    final providers = await _resolveProviders(null);
+    final providers = await _resolveProviders(null, localOnly: _localOnly);
     if (providers == null) return; // state already set to an error
 
     final ImportedAudio imported;
@@ -451,8 +466,10 @@ class RecordingController extends StateNotifier<RecordState> {
       transcriptionProviderId: providers.transcription.id.value,
       structuringProviderId: providers.structuring.id.value,
       title: imported.sourceName,
+      localOnly: _localOnly,
     );
 
+    final templateInstructions = await _activeTemplateInstructions();
     await _consume(
       _pipelineFor(providers, imported.path).start(
         recordingId: recordingId,
@@ -465,6 +482,7 @@ class RecordingController extends StateNotifier<RecordState> {
         userContext: _settings.customVocabulary.isEmpty
             ? null
             : 'Custom vocabulary: ${_settings.customVocabulary}',
+        templateInstructions: templateInstructions,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
         flashcardLimit: _flashcardLimit,
         quizLimit: _quizLimit,
@@ -485,26 +503,42 @@ class RecordingController extends StateNotifier<RecordState> {
     if (providers == null) return;
 
     for (final recordingId in pending) {
-      final recording = await _repository.byId(recordingId);
-      if (recording?.audioPath == null ||
-          !File(recording!.audioPath!).existsSync()) {
-        // The audio is gone, so the outstanding chunks can never be transcribed.
-        // Structure whatever did complete rather than retrying forever.
-        continue;
-      }
-
-      await _consume(
-        _pipelineFor(providers, recording.audioPath!).resume(
-          recordingId: recordingId,
-          referenceDate: _isoDate(recording.startedAt),
-          timeZone: DateTime.now().timeZoneName,
-          keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
-          flashcardLimit: _flashcardLimit,
-          quizLimit: _quizLimit,
-        ),
-        recordingId,
-      );
+      await _resumeRecording(recordingId, providers: providers);
     }
+  }
+
+  /// Resumes one queue item after a manual retry or from the processing queue screen.
+  Future<void> resumeRecording(String recordingId) async {
+    final recording = await _repository.byId(recordingId);
+    if (recording == null || recording.audioPath == null) return;
+    final providers =
+        await _resolveProviders(null, localOnly: recording.localOnly);
+    if (providers == null) return;
+    await _resumeRecording(recordingId, providers: providers);
+  }
+
+  Future<void> _resumeRecording(
+    String recordingId, {
+    required _Providers providers,
+  }) async {
+    final recording = await _repository.byId(recordingId);
+    if (recording?.audioPath == null ||
+        !File(recording!.audioPath!).existsSync()) {
+      return;
+    }
+    final templateInstructions = await _activeTemplateInstructions();
+    await _consume(
+      _pipelineFor(providers, recording.audioPath!).resume(
+        recordingId: recordingId,
+        referenceDate: _isoDate(recording.startedAt),
+        timeZone: DateTime.now().timeZoneName,
+        templateInstructions: templateInstructions,
+        keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
+        flashcardLimit: _flashcardLimit,
+        quizLimit: _quizLimit,
+      ),
+      recordingId,
+    );
   }
 
   DurableRecordingPipeline _pipelineFor(
@@ -519,6 +553,15 @@ class RecordingController extends StateNotifier<RecordState> {
         ),
         structuring: StructuringPipeline(provider: providers.structuring),
       );
+
+  Future<String?> _activeTemplateInstructions() async {
+    final id = _settings.activeTemplateId;
+    if (id == null) return null;
+    final template = await (_db.select(_db.noteTemplates)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    return template?.instructions;
+  }
 
   String? get _languageHint => _settings.workflowEnabled('multiLanguage')
       ? _settings.transcriptionLanguage
@@ -559,6 +602,9 @@ class RecordingController extends StateNotifier<RecordState> {
             cleaned: _cleanedTranscript(transcript),
           );
           await _repository.saveNote(recordingId, outcome);
+          if (_settings.autoDeleteSourceAudio) {
+            await _repository.deleteSourceAudio(recordingId);
+          }
           final structuringWarning = _warningFor(transcript, outcome);
           final warning = [
             if (_storageWarning != null) _storageWarning!,
@@ -589,7 +635,10 @@ class RecordingController extends StateNotifier<RecordState> {
         'different service in Settings.\n\n$detail';
   }
 
-  Future<_Providers?> _resolveProviders(TranscriptionProvider? live) async {
+  Future<_Providers?> _resolveProviders(
+    TranscriptionProvider? live, {
+    bool localOnly = false,
+  }) async {
     final structuringKind = _settings.kindFor(ProviderStage.structuring);
     if (structuringKind == null) {
       state = const RecordError(
@@ -614,9 +663,24 @@ class RecordingController extends StateNotifier<RecordState> {
       );
       return null;
     }
+    if (localOnly && !structuringKind.isLocalNetwork) {
+      state = RecordError(
+        'Local-only recording needs a local note-writing service.',
+        remedy:
+            'Choose Ollama or LM Studio in Settings, or turn off Local only.',
+      );
+      return null;
+    }
 
     final transcriptionKind = _settings.kindFor(ProviderStage.transcription) ??
         SettingsStore.defaultTranscription;
+    if (localOnly && !transcriptionKind.runsOnDevice) {
+      state = RecordError(
+        'Local-only recording needs on-device transcription.',
+        remedy: 'Choose Whisper offline or on-device recognition in Settings.',
+      );
+      return null;
+    }
     final transcription = live ??
         await _factory.transcription(ProviderSelection(
           kind: transcriptionKind,
@@ -675,6 +739,11 @@ final databaseProvider = Provider<TranscriptDatabase>((ref) {
 
 final repositoryProvider = Provider<RecordingRepository>(
   (ref) => RecordingRepository(ref.watch(databaseProvider)),
+);
+
+final reminderServiceProvider = Provider<ReminderService>(
+  (ref) =>
+      throw UnimplementedError('reminderServiceProvider must be overridden'),
 );
 
 final recorderProvider = Provider<RecorderService>((ref) {

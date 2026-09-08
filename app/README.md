@@ -1,4 +1,4 @@
-# transcript_app
+# echo_codex_app
 
 A new Flutter project.
 

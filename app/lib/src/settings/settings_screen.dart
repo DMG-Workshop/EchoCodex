@@ -13,7 +13,11 @@ import 'connection_test_controller.dart';
 import 'local_discovery_sheet.dart';
 import 'provider_config.dart';
 import 'secure_key_store.dart';
+import 'template_manager_screen.dart';
 import 'workflow_settings_screen.dart';
+import '../screens/health_screen.dart';
+import '../screens/weekly_review_screen.dart';
+import '../screens/backup_screen.dart';
 
 /// Where the two provider slots are chosen and proven.
 ///
@@ -95,6 +99,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   builder: (_) => const WorkflowSettingsScreen()),
             ),
           ),
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('Note templates'),
+            subtitle:
+                const Text('Save reusable instructions for structured notes'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                  builder: (_) => const TemplateManagerScreen()),
+            ),
+          ),
           const Divider(height: 32),
           ListTile(
             leading: const Icon(Icons.lock_outline),
@@ -105,6 +120,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const PrivacyScreen()),
+            ),
+          ),
+          SwitchListTile.adaptive(
+            secondary: const Icon(Icons.delete_sweep_outlined),
+            title: const Text('Delete source audio after processing'),
+            subtitle: const Text(
+                'Keep notes and transcripts, remove original audio.'),
+            value: settings.autoDeleteSourceAudio,
+            onChanged: (value) async {
+              await settings.setAutoDeleteSourceAudio(value);
+              _onChanged();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.fact_check_outlined),
+            title: const Text('Weekly review'),
+            subtitle: const Text(
+                'Review unfinished commitments from the last 7 days'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                  builder: (_) => const WeeklyReviewScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.health_and_safety_outlined),
+            title: const Text('Storage and provider health'),
+            subtitle:
+                const Text('Check local storage and configured AI services'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const HealthScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.https_outlined),
+            title: const Text('Encrypted device backup'),
+            subtitle: const Text('Move notes and transcripts between devices'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const BackupScreen()),
             ),
           ),
           const Divider(height: 32),

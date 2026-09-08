@@ -60,10 +60,41 @@ class PrivacyScreen extends ConsumerWidget {
           for (final practice in PrivacyDisclosure.practices)
             _PracticeTile(practice: practice),
           const Divider(height: 32),
+          const _PrivacyAuditSection(),
+          const SizedBox(height: 24),
           const _CrashReportsSection(),
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+}
+
+class _PrivacyAuditSection extends ConsumerWidget {
+  const _PrivacyAuditSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder(
+      future: ref.read(repositoryProvider).privacyAudits(),
+      builder: (context, snapshot) {
+        final audits = snapshot.data;
+        if (audits == null || audits.isEmpty) return const SizedBox.shrink();
+        return ExpansionTile(
+          leading: const Icon(Icons.history),
+          title: const Text('Privacy activity'),
+          subtitle: Text('${audits.length} local events'),
+          children: [
+            for (final audit in audits.take(20))
+              ListTile(
+                dense: true,
+                title: Text(audit.action),
+                subtitle:
+                    Text('${audit.createdAt.toLocal()} · ${audit.detail}'),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -166,11 +197,11 @@ class _CrashReportsSection extends ConsumerWidget {
                   onPressed: () => SharePlus.instance.share(
                     ShareParams(
                       text: renderCrashBundle(reports),
-                      subject: 'Transcript diagnostics',
+                      subject: 'Echo Codex redacted feedback bundle',
                     ),
                   ),
                   icon: const Icon(Icons.ios_share, size: 18),
-                  label: const Text('Share'),
+                  label: const Text('Share redacted feedback'),
                 ),
                 const SizedBox(width: 12),
                 TextButton(

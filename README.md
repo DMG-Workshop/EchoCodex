@@ -1,5 +1,7 @@
 # Echo Codex
 
+https://echocodex.xyz
+
 A cross-platform (iOS + Android) recorder that turns speech into structured, actionable
 notes — bulleted summaries, action items, Gnatt board and timelines — using **your own AI**.
 
@@ -18,8 +20,13 @@ Pre-implementation. The architecture and build plan are complete.
 | Document | What's in it |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Stack choice, system design, audio chunking pipeline, provider abstraction, roadmap |
+| [`docs/IDEAS.md`](docs/IDEAS.md) | Product ideas and remaining backlog for Echo Codex |
 | [`docs/schemas/note-document.schema.json`](docs/schemas/note-document.schema.json) | The canonical `NoteDocument` schema every provider fills |
 | [`docs/prompts/structuring.md`](docs/prompts/structuring.md) | Production prompts: extraction, map/reduce, schema repair, sprint planning |
+
+## Integrations
+
+- [Echo Codex Notes for Foundry VTT](https://github.com/DMG-Workshop/EchoCodex-Foundry)
 
 ## The shape of it
 
@@ -61,6 +68,21 @@ dart run tool/export_schema.dart
 # App: drift needs codegen before analyze will pass
 cd app && flutter pub get && dart run build_runner build --delete-conflicting-outputs
 flutter run
+
+# Linux desktop
+cd app && flutter config --enable-linux-desktop
+flutter run -d linux
+flutter build linux --release
+
+# Windows desktop (run on Windows with Visual Studio C++ tools installed)
+cd app && flutter config --enable-windows-desktop
+flutter run -d windows
+flutter build windows --release
+
+# macOS desktop (run on macOS with Xcode installed)
+cd app && flutter config --enable-macos-desktop
+flutter run -d macos
+flutter build macos --release
 ```
 
 ## Status

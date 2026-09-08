@@ -3,8 +3,8 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:transcript_app/src/recording/audio_decoder.dart';
-import 'package:transcript_app/src/recording/audio_import.dart';
+import 'package:echo_codex_app/src/recording/audio_decoder.dart';
+import 'package:echo_codex_app/src/recording/audio_import.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 /// Stands in for the platform codecs: records what it was asked to decode and writes

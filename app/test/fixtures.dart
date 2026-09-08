@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:transcript_app/src/data/database.dart' as db;
-import 'package:transcript_app/src/data/repository.dart';
+import 'package:drift/drift.dart' hide isNull;
+import 'package:echo_codex_app/src/data/database.dart' as db;
+import 'package:echo_codex_app/src/data/repository.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 /// A note with one dated task, one undated task, a decision and an unclear-audio flag —
@@ -10,13 +11,19 @@ import 'package:transcript_core/transcript_core.dart';
 Map<String, dynamic> noteJson() => {
       'meta': {
         'title': 'Auth migration kickoff',
-        'summary': 'The team agreed to retire the legacy session store before launch.',
+        'summary':
+            'The team agreed to retire the legacy session store before launch.',
         'recordingType': 'meeting',
         'language': 'en-US',
         'extractionConfidence': 'high',
       },
       'participants': [
-        {'id': 'p_priya', 'displayName': 'Priya', 'aliases': <String>[], 'role': null},
+        {
+          'id': 'p_priya',
+          'displayName': 'Priya',
+          'aliases': <String>[],
+          'role': null
+        },
       ],
       'sections': [
         {
@@ -96,6 +103,8 @@ db.Recording recordingRow({
   bool structured = true,
   String? overrideNote,
   String? transcriptText,
+  String? transcriptSegmentsJson,
+  String? speakerNamesJson,
   String? cleanedTranscriptText,
   bool priority = false,
 }) =>
@@ -114,8 +123,12 @@ db.Recording recordingRow({
       inputTokens: 1840,
       outputTokens: 610,
       transcriptText: transcriptText,
+      transcriptSegmentsJson: transcriptSegmentsJson,
+      speakerNamesJson: speakerNamesJson,
       cleanedTranscriptText: cleanedTranscriptText,
       priority: priority,
+      localOnly: false,
+      templateId: null,
     );
 
 /// A [RecordingRepository] stand-in for widget tests that need real delete behaviour
@@ -137,6 +150,22 @@ class FakeRecordingRepository implements RecordingRepository {
     _rows = _rows.where((r) => r.id != id).toList();
     _controller.add(List.unmodifiable(_rows));
   }
+
+  @override
+  Future<void> deleteSourceAudio(String id) async {}
+
+  @override
+  Future<void> recordPrivacyAudit(String action, String detail) async {}
+
+  @override
+  Future<List<db.PrivacyAudit>> privacyAudits() async => const [];
+
+  @override
+  Future<void> restoreBackupRecording(
+    Map<String, dynamic> data, {
+    List<int>? audioBytes,
+    String? audioExtension,
+  }) async {}
 
   // A broadcast stream drops any event fired before a listener subscribes, and the
   // widget subscribes only once it builds — so a plain `_controller.stream` would leave
@@ -163,7 +192,66 @@ class FakeRecordingRepository implements RecordingRepository {
     required String transcriptionProviderId,
     required String structuringProviderId,
     String? title,
+    bool localOnly = false,
+    String? templateId,
   }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> setLocalOnly(String recordingId, bool localOnly) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> deleteReminder(String recordingId, String taskId) async {}
+
+  @override
+  Future<void> saveSpeakerNames(
+      String recordingId, Map<String, String> names) async {
+    _rows = [
+      for (final row in _rows)
+        if (row.id == recordingId)
+          row.copyWith(speakerNamesJson: Value(jsonEncode(names)))
+        else
+          row,
+    ];
+    _controller.add(List.unmodifiable(_rows));
+  }
+
+  @override
+  Future<List<ProcessingQueueItem>> processingQueue() async => const [];
+
+  @override
+  Future<void> retryRecording(String recordingId) async {}
+
+  @override
+  Future<List<db.NoteTemplate>> templates() async => const [];
+
+  @override
+  Future<void> saveTemplate({
+    required String id,
+    required String name,
+    required String instructions,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> deleteTemplate(String id) => throw UnimplementedError();
+
+  @override
+  Future<void> saveReminder({
+    required String recordingId,
+    required String taskId,
+    required String title,
+    required DateTime remindAt,
+  }) =>
+      throw UnimplementedError();
+
+  @override
+  Future<List<db.ActionReminder>> reminders({bool pendingOnly = false}) async =>
+      const [];
+
+  @override
+  Future<void> completeReminder(String id, bool completed) =>
       throw UnimplementedError();
 
   @override

@@ -67,7 +67,7 @@ jobs:
       - run: flutter test test/native_smoke_test.dart
 
   app:
-    name: transcript_app
+    name: echo_codex_app
     runs-on: ubuntu-latest
     defaults:
       run:

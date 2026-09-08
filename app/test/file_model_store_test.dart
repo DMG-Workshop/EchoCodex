@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/whisper/file_model_store.dart';
+import 'package:echo_codex_app/src/whisper/file_model_store.dart';
 
 void main() {
   late Directory tmp;

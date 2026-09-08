@@ -1,6 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/recording/shared_file.dart';
+import 'package:echo_codex_app/src/recording/shared_file.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

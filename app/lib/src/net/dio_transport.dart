@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 /// Adapts `dio` to the core package's [HttpTransport] seam.
@@ -7,7 +10,7 @@ import 'package:transcript_core/transcript_core.dart';
 /// with a fake. This is the one place the real client is wired in, which is also the one
 /// place to add logging, retry policy and cancellation.
 class DioTransport implements HttpTransport {
-  DioTransport({Dio? dio}) : _dio = dio ?? Dio() {
+  DioTransport({Dio? dio, this.onAudit}) : _dio = dio ?? Dio() {
     _dio.interceptors.add(
       InterceptorsWrapper(
         onError: (e, handler) {
@@ -27,6 +30,7 @@ class DioTransport implements HttpTransport {
   };
 
   final Dio _dio;
+  final Future<void> Function(String action, String detail)? onAudit;
 
   @override
   Future<HttpReply> send(HttpCall call) async {
@@ -51,6 +55,11 @@ class DioTransport implements HttpTransport {
         ),
       );
 
+      await _audit(
+        'provider_request',
+        '${call.method} ${call.url.host}${call.url.path} -> ${response.statusCode ?? 0}',
+      );
+
       return HttpReply(
         response.statusCode ?? 0,
         binaryResponse ? '' : (response.data as String? ?? ''),
@@ -63,6 +72,10 @@ class DioTransport implements HttpTransport {
             : null,
       );
     } on DioException catch (e) {
+      await _audit(
+        'provider_request_failed',
+        '${call.method} ${call.url.host}${call.url.path} -> ${e.type.name}',
+      );
       throw TransportException(_classify(e), e.message ?? e.type.name);
     }
   }
@@ -87,5 +100,21 @@ class DioTransport implements HttpTransport {
       return TransportFailure.unresolved;
     }
     return TransportFailure.refused;
+  }
+
+  Future<void> _audit(String action, String detail) async {
+    if (onAudit != null) {
+      await onAudit!(action, detail);
+      return;
+    }
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      await File('${directory.path}/provider-audit.log').writeAsString(
+        '${DateTime.now().toIso8601String()} [$action] $detail\n',
+        mode: FileMode.append,
+      );
+    } catch (_) {
+      // Diagnostics must never make a provider request fail.
+    }
   }
 }

@@ -1,0 +1,32 @@
+pkgname=echo-codex
+pkgver=0.5.2_alpha.1
+pkgrel=1
+pkgdesc='Private recordings turned into structured notes'
+arch=('x86_64')
+url='https://echocodex.xyz'
+license=('MIT')
+depends=('gtk3' 'alsa-lib' 'libglvnd')
+makedepends=('flutter' 'cmake' 'ninja' 'git')
+source=("$pkgname::git+https://github.com/DMG-Workshop/EchoCodex.git#branch=main")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$pkgname/app"
+  flutter config --enable-linux-desktop
+  flutter pub get
+  flutter build linux --release
+}
+
+package() {
+  cd "$srcdir/$pkgname/app"
+  install -dm755 "$pkgdir/opt/echo-codex"
+  cp -a build/linux/x64/release/bundle/. "$pkgdir/opt/echo-codex/"
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s /opt/echo-codex/echo_codex_app "$pkgdir/usr/bin/echo-codex"
+  install -Dm644 "$srcdir/$pkgname/packaging/flatpak/com.dmgworkshop.echo_codex_app.desktop" \
+    "$pkgdir/usr/share/applications/com.dmgworkshop.echo_codex_app.desktop"
+  sed -i 's/^Exec=echo-codex$/Exec=\/usr\/bin\/echo-codex/' \
+    "$pkgdir/usr/share/applications/com.dmgworkshop.echo_codex_app.desktop"
+  install -Dm644 "$srcdir/$pkgname/app/icons/android-chrome-512x512.png" \
+    "$pkgdir/usr/share/icons/hicolor/512x512/apps/com.dmgworkshop.echo_codex_app.png"
+}

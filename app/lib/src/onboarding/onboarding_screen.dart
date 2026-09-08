@@ -149,6 +149,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ),
                   if (_isLast) ...[
                     const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => _showOfflineSample(context),
+                      icon: const Icon(Icons.offline_bolt_outlined),
+                      label: const Text('Explore an offline sample'),
+                    ),
+                    const SizedBox(height: 4),
                     TextButton(
                       onPressed: () {
                         widget.onDone();
@@ -166,6 +172,32 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showOfflineSample(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Offline sample'),
+        content: const SingleChildScrollView(
+          child: Text(
+            'Echo Codex can work without an account or hosted backend.\n\n'
+            'Sample meeting\n'
+            '• Decision: move the release to Friday\n'
+            '• Action: Priya updates the runbook\n'
+            '• Open question: which local model should structure the notes?\n\n'
+            'Your real recordings, transcripts, and notes stay on this device unless '
+            'you choose a provider or export them.',
+          ),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close sample'),
+          ),
+        ],
       ),
     );
   }

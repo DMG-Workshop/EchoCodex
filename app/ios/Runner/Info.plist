@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>KallaNotes</string>
+	<string>Echo Codex</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>transcript_app</string>
+	<string>echo_codex_app</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -67,12 +67,12 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>CFBundleDisplayName</key>
-	<string>KallaNotes</string>
+	<string>Echo Codex</string>
 
 	<!-- Recording. Both strings are shown verbatim at the permission prompt and are read
 	     during App Review, so they name the benefit rather than the mechanism. -->
 	<key>NSMicrophoneUsageDescription</key>
-	<string>KallaNotes records audio so it can be turned into notes and action items on this device or by the AI service you choose.</string>
+	<string>Echo Codex records audio so it can be turned into notes and action items on this device or by the AI service you choose.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Speech recognition runs on this device to turn your recordings into text without sending audio anywhere.</string>
 
@@ -105,7 +105,7 @@
 		<true/>
 	</dict>
 
-	<!-- Puts KallaNotes in the share sheet and the "Open with" list for recordings, so a
+	<!-- Puts Echo Codex in the share sheet and the "Open with" list for recordings, so a
 	     meeting exported from Zoom or a voice memo from another app can be sent straight
 	     here instead of being found again through the picker. The audio and movie types
 	     are the umbrella UTIs; the specific ones are listed because not every app tags a

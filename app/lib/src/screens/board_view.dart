@@ -4,6 +4,7 @@ import 'package:transcript_core/transcript_core.dart';
 
 import 'board_controller.dart';
 import 'task_editor.dart';
+import '../recording/recording_controller.dart';
 
 /// A Kanban board over the note's action items.
 ///
@@ -34,6 +35,17 @@ class BoardView extends ConsumerWidget {
         )
         .map((t) => t.id)
         .toSet();
+    final filtered = note.tasks
+        .where((task) {
+          if (!visible.contains(task.id)) return false;
+          if (filter.status != null && task.status != filter.status) {
+            return false;
+          }
+          if (filter.dueOnly && task.dueDate == null) return false;
+          return true;
+        })
+        .map((task) => task.id)
+        .toSet();
 
     if (note.tasks.isEmpty) {
       return _EmptyBoard(recordingId: recordingId, note: note);
@@ -53,7 +65,7 @@ class BoardView extends ConsumerWidget {
                   note: note,
                   status: status,
                   tasks: note.board[status]!
-                      .where((t) => visible.contains(t.id))
+                      .where((t) => filtered.contains(t.id))
                       .toList(),
                 ),
             ],
@@ -249,7 +261,8 @@ class TaskCard extends ConsumerWidget {
                 runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  if (owner != null) _Meta(icon: Icons.person_outline, label: owner),
+                  if (owner != null)
+                    _Meta(icon: Icons.person_outline, label: owner),
                   if (task.priority != TaskPriority.medium)
                     _Meta(
                       icon: Icons.flag_outlined,
@@ -372,6 +385,53 @@ class _FilterBar extends ConsumerWidget {
                   controller.state = filter.copyWith(unassignedOnly: on),
             ),
           ),
+          for (final status in TaskStatus.values)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                label: Text(_statusLabel(status)),
+                selected: filter.status == status,
+                onSelected: (on) => controller.state =
+                    filter.copyWith(status: on ? status : null),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: FilterChip(
+              label: const Text('Due dated'),
+              selected: filter.dueOnly,
+              onSelected: (on) =>
+                  controller.state = filter.copyWith(dueOnly: on),
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Saved views',
+            icon: const Icon(Icons.bookmarks_outlined),
+            onSelected: (value) async {
+              if (value == '__save__') {
+                final name = await _askForName(context);
+                if (name != null) {
+                  await ref.read(settingsStoreProvider).saveBoardView(
+                        name,
+                        filter.toJson(),
+                      );
+                }
+                return;
+              }
+              final saved =
+                  ref.read(settingsStoreProvider).savedBoardViews[value];
+              if (saved != null) {
+                controller.state = BoardFilter.fromJson(saved);
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                  value: '__save__', child: Text('Save current view')),
+              for (final name
+                  in ref.read(settingsStoreProvider).savedBoardViews.keys)
+                PopupMenuItem(value: name, child: Text(name)),
+            ],
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilterChip(
@@ -390,6 +450,39 @@ class _FilterBar extends ConsumerWidget {
       ),
     );
   }
+
+  Future<String?> _askForName(BuildContext context) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Save board view'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'View name'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result == null || result.isEmpty ? null : result;
+  }
+
+  static String _statusLabel(TaskStatus status) => switch (status) {
+        TaskStatus.todo => 'To do',
+        TaskStatus.inProgress => 'In progress',
+        TaskStatus.blocked => 'Blocked',
+        TaskStatus.done => 'Done',
+      };
 }
 
 class _EmptyBoard extends ConsumerWidget {

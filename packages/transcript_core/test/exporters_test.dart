@@ -194,9 +194,10 @@ void main() {
           ics.split('\n').every((l) => l.isEmpty || l.endsWith('\r')), isTrue);
     });
 
-    test('a dated task becomes a VTODO with a date-valued due', () {
-      expect(ics, contains('BEGIN:VTODO'));
-      expect(ics, contains('DUE;VALUE=DATE:20260918'));
+    test('a dated task becomes an all-day phone calendar event', () {
+      expect(ics, contains('BEGIN:VEVENT'));
+      expect(ics, contains('DTSTART;VALUE=DATE:20260918'));
+      expect(ics, contains('DTEND;VALUE=DATE:20260918'));
     });
 
     test('a milestone becomes an all-day event', () {
@@ -210,7 +211,7 @@ void main() {
         withTasks([taskJson(id: 't', basis: 'absent')]),
         stamp: DateTime.utc(2026, 9, 5),
       );
-      expect(calendar, isNot(contains('BEGIN:VTODO')),
+      expect(calendar, isNot(contains('SUMMARY:Do the thing')),
           reason: 'it would have to be invented a date to exist here at all');
     });
 
@@ -219,7 +220,7 @@ void main() {
         withTasks([taskJson(id: 't', due: '2026-09-30', basis: 'inferred')]),
         stamp: DateTime.utc(2026, 9, 5),
       );
-      expect(calendar, contains('DUE;VALUE=DATE:20260930'));
+      expect(calendar, contains('DTSTART;VALUE=DATE:20260930'));
       // The comma in the marker is escaped per RFC 5545, so match the part before it.
       expect(calendar, contains('inferred from the recording'));
       expect(calendar, contains(r'recording\, not stated'),

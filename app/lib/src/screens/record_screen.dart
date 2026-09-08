@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../recording/recording_controller.dart';
 import '../settings/settings_screen.dart';
@@ -25,9 +27,33 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
   void initState() {
     super.initState();
 
+    const widgetChannel = MethodChannel('com.echocodex/widget');
+    final hasAndroidWidget = defaultTargetPlatform == TargetPlatform.android;
+    if (hasAndroidWidget) {
+      widgetChannel.setMethodCallHandler((call) async {
+        if (call.method == 'widgetAction' &&
+            call.arguments == 'com.dmgworkshop.echo_codex_app.WIDGET_RECORD') {
+          await ref.read(recordingControllerProvider.notifier).startRecording();
+        }
+      });
+    }
+
     // Anything the OS killed mid-meeting resumes now, before the user has done
     // anything. They open the app and their notes are already being written.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (hasAndroidWidget) {
+        try {
+          final initialAction =
+              await widgetChannel.invokeMethod<String>('initialAction');
+          if (initialAction == 'com.dmgworkshop.echo_codex_app.WIDGET_RECORD') {
+            await ref
+                .read(recordingControllerProvider.notifier)
+                .startRecording();
+          }
+        } on MissingPluginException {
+          // A desktop target has no Android home-screen widget bridge.
+        }
+      }
       final controller = ref.read(recordingControllerProvider.notifier);
       await controller.resumeUnfinished();
 
@@ -87,73 +113,124 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       }
     });
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('KallaNotes'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.library_books_outlined),
-            tooltip: 'Recordings',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const LibraryScreen()),
-            ),
-          ),
-          // Settings was previously reachable only through the library, which put the
-          // provider choice two screens away from the button that starts sending audio
-          // to it.
-          IconButton(
-            icon: const Icon(Icons.tune),
-            tooltip: 'AI providers',
-            onPressed: () => _openSettings(context, ref),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (state is RecordIdle || state is RecordDone || state is RecordError)
-                _ConfigureAiBanner(onTap: () => _openSettings(context, ref)),
-              Expanded(child: RecordBody(state: state, levels: _levels)),
-            ],
-          ),
-        ),
-      ),
-      floatingActionButton: switch (state) {
-        // Stopping goes to whichever capture is actually running: the two are torn down
-        // by different paths, and the microphone one would leave the projection open.
-        RecordActive(source: RecordSource.deviceAudio) =>
-          FloatingActionButton.large(
-            onPressed: () => ref
-                .read(recordingControllerProvider.notifier)
-                .stopDeviceCapture(),
-            tooltip: 'Stop and write notes',
-            child: const Icon(Icons.stop),
-          ),
-        RecordActive() => FloatingActionButton.large(
-            onPressed: () =>
-                ref.read(recordingControllerProvider.notifier).stopAndProcess(),
-            tooltip: 'Stop and write notes',
-            child: const Icon(Icons.stop),
-          ),
-        RecordProcessing() => null,
-        _ => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const DeviceAudioButton(),
-              FloatingActionButton.large(
-                onPressed: () => ref
-                    .read(recordingControllerProvider.notifier)
-                    .startRecording(),
-                tooltip: 'Start recording',
-                child: const Icon(Icons.mic),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.space): () {
+          final controller = ref.read(recordingControllerProvider.notifier);
+          if (state is RecordActive) {
+            controller.stopAndProcess();
+          } else if (state is RecordIdle || state is RecordDone) {
+            controller.startRecording();
+          }
+        },
+        const SingleActivator(LogicalKeyboardKey.keyL, control: true): () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const LibraryScreen()),
+          );
+        },
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
+          _openSettings(context, ref);
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          appBar: AppBar(
+            title: const Text('Echo Codex'),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.library_books_outlined),
+                tooltip: 'Recordings',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) => const LibraryScreen()),
+                ),
+              ),
+              // Settings was previously reachable only through the library, which put the
+              // provider choice two screens away from the button that starts sending audio
+              // to it.
+              IconButton(
+                icon: const Icon(Icons.tune),
+                tooltip: 'AI providers',
+                onPressed: () => _openSettings(context, ref),
               ),
             ],
           ),
-      },
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (state is RecordIdle ||
+                      state is RecordDone ||
+                      state is RecordError)
+                    _ConfigureAiBanner(
+                        onTap: () => _openSettings(context, ref)),
+                  if (state is RecordIdle)
+                    SwitchListTile.adaptive(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Local only'),
+                      subtitle:
+                          const Text('Use only on-device or local-network AI.'),
+                      value: ref
+                          .read(recordingControllerProvider.notifier)
+                          .localOnly,
+                      onChanged: (value) {
+                        ref
+                            .read(recordingControllerProvider.notifier)
+                            .setLocalOnly(value);
+                        setState(() {});
+                      },
+                    ),
+                  Expanded(child: RecordBody(state: state, levels: _levels)),
+                ],
+              ),
+            ),
+          ),
+          floatingActionButton: switch (state) {
+            // Stopping goes to whichever capture is actually running: the two are torn down
+            // by different paths, and the microphone one would leave the projection open.
+            RecordActive(source: RecordSource.deviceAudio) => Semantics(
+                button: true,
+                label: 'Stop and write notes',
+                child: FloatingActionButton.large(
+                  onPressed: () => ref
+                      .read(recordingControllerProvider.notifier)
+                      .stopDeviceCapture(),
+                  tooltip: 'Stop and write notes',
+                  child: const Icon(Icons.stop),
+                ),
+              ),
+            RecordActive() => Semantics(
+                button: true,
+                label: 'Stop and write notes',
+                child: FloatingActionButton.large(
+                  onPressed: () => ref
+                      .read(recordingControllerProvider.notifier)
+                      .stopAndProcess(),
+                  tooltip: 'Stop and write notes',
+                  child: const Icon(Icons.stop),
+                ),
+              ),
+            RecordProcessing() => null,
+            _ => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const DeviceAudioButton(),
+                  FloatingActionButton.large(
+                    onPressed: () => ref
+                        .read(recordingControllerProvider.notifier)
+                        .startRecording(),
+                    tooltip: 'Start recording',
+                    child: const Icon(Icons.mic),
+                  ),
+                ],
+              ),
+          },
+        ),
+      ),
     );
   }
 }
@@ -216,7 +293,8 @@ class _ConfigureAiBanner extends ConsumerWidget {
             padding: const EdgeInsets.all(14),
             child: Row(
               children: [
-                Icon(Icons.key_outlined, color: theme.colorScheme.onTertiaryContainer),
+                Icon(Icons.key_outlined,
+                    color: theme.colorScheme.onTertiaryContainer),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -235,7 +313,8 @@ class _ConfigureAiBanner extends ConsumerWidget {
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right, color: theme.colorScheme.onTertiaryContainer),
+                Icon(Icons.chevron_right,
+                    color: theme.colorScheme.onTertiaryContainer),
               ],
             ),
           ),

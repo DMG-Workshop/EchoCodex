@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
-import 'package:transcript_app/src/recording/recorder_service.dart';
+import 'package:echo_codex_app/src/recording/recorder_service.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 void main() {

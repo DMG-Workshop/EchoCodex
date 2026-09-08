@@ -1,11 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:transcript_app/src/data/database.dart' as db;
-import 'package:transcript_app/src/recording/recording_controller.dart';
-import 'package:transcript_app/src/screens/library_screen.dart';
-import 'package:transcript_app/src/settings/provider_config.dart';
+import 'package:echo_codex_app/src/data/database.dart' as db;
+import 'package:echo_codex_app/src/recording/recording_controller.dart';
+import 'package:echo_codex_app/src/screens/library_screen.dart';
+import 'package:echo_codex_app/src/settings/provider_config.dart';
 
 import 'fixtures.dart';
 
@@ -36,6 +38,7 @@ void main() {
     await pumpLibrary(tester, rows: [
       recordingRow(),
       recordingRow(
+        structured: false,
         transcriptText: 'a totally different subject',
       ).copyWith(id: 'r_2', title: 'Standup notes'),
     ]);
@@ -48,6 +51,26 @@ void main() {
 
     expect(find.text('Auth migration kickoff'), findsOneWidget);
     expect(find.text('Standup notes'), findsNothing);
+  });
+
+  testWidgets('searching finds generated note content', (tester) async {
+    final note = noteJson();
+    final task = (note['tasks'] as List<dynamic>).first as Map<String, dynamic>;
+    task['title'] = 'Prepare the launch readiness checklist';
+    await pumpLibrary(tester, rows: [
+      recordingRow(
+        transcriptText: 'unrelated transcript text',
+        overrideNote: jsonEncode(note),
+      ).copyWith(title: 'A different recording'),
+    ]);
+
+    await tester.enterText(
+      find.byType(TextField),
+      'launch readiness checklist',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('A different recording'), findsOneWidget);
   });
 
   testWidgets('an unfinished recording can be marked urgent', (tester) async {

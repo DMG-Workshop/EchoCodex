@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/recording/recording_controller.dart';
-import 'package:transcript_app/src/screens/record_screen.dart';
-import 'package:transcript_app/src/widgets/waveform.dart';
+import 'package:echo_codex_app/src/recording/recording_controller.dart';
+import 'package:echo_codex_app/src/screens/record_screen.dart';
+import 'package:echo_codex_app/src/widgets/waveform.dart';
 
 void main() {
   Future<void> pump(WidgetTester tester, RecordState state,

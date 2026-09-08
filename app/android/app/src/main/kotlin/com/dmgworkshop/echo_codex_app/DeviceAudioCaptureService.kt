@@ -1,4 +1,4 @@
-package com.dmgworkshop.transcript_app
+package com.dmgworkshop.echo_codex_app
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -244,7 +244,7 @@ class DeviceAudioCaptureService : Service() {
 
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("Recording device audio")
-            .setContentText("KallaNotes is recording what this device is playing.")
+            .setContentText("Echo Codex is recording what this device is playing.")
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .build()

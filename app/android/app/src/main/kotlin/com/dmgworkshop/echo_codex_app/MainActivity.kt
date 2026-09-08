@@ -1,4 +1,4 @@
-package com.dmgworkshop.transcript_app
+package com.dmgworkshop.echo_codex_app
 
 import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
@@ -8,9 +8,26 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var sharedFiles: SharedFilePlugin? = null
     private var deviceAudio: DeviceAudioCapturePlugin? = null
+    private var widgetChannel: MethodChannel? = null
+    private var pendingWidgetAction: String? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        pendingWidgetAction = intent.action
+        widgetChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            WIDGET_CHANNEL,
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "initialAction") {
+                    result.success(pendingWidgetAction)
+                    pendingWidgetAction = null
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -44,6 +61,9 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (intent.action == EchoCodexWidgetProvider.ACTION_RECORD) {
+            widgetChannel?.invokeMethod("widgetAction", intent.action)
+        }
         sharedFiles?.handleIntent(intent)
     }
 
@@ -56,5 +76,9 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         deviceAudio?.activity = null
         super.onDestroy()
+    }
+
+    companion object {
+        const val WIDGET_CHANNEL = "com.echocodex/widget"
     }
 }

@@ -1,0 +1,35 @@
+app-id: com.dmgworkshop.echo_codex_app
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: echo-codex
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=home
+modules:
+  - name: echo-codex
+    buildsystem: simple
+    build-commands:
+      - install -d /app/lib/echo-codex
+      - cp -a echo_codex_app lib data /app/lib/echo-codex/
+      - install -Dm755 echo-codex /app/bin/echo-codex
+      - install -Dm644 com.dmgworkshop.echo_codex_app.desktop /app/share/applications/com.dmgworkshop.echo_codex_app.desktop
+      - install -Dm644 com.dmgworkshop.echo_codex_app.metainfo.xml /app/share/metainfo/com.dmgworkshop.echo_codex_app.metainfo.xml
+      - install -Dm644 android-chrome-512x512.png /app/share/icons/hicolor/512x512/apps/com.dmgworkshop.echo_codex_app.png
+    sources:
+      - type: dir
+        path: ../../app/build/linux/x64/release/bundle
+      - type: file
+        path: com.dmgworkshop.echo_codex_app.desktop
+      - type: file
+        path: com.dmgworkshop.echo_codex_app.metainfo.xml
+      - type: file
+        path: echo-codex
+      - type: file
+        path: ../../app/icons/android-chrome-512x512.png
+        dest-filename: android-chrome-512x512.png

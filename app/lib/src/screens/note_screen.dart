@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transcript_core/transcript_core.dart';
@@ -7,8 +9,8 @@ import '../data/repository.dart';
 import '../recording/recording_controller.dart';
 import 'package:intl/intl.dart';
 
-import 'board_view.dart';
 import 'export_sheet.dart';
+import 'calendar_view.dart';
 import 'timeline_view.dart';
 import 'record_screen.dart';
 
@@ -27,8 +29,8 @@ class NoteScreen extends ConsumerWidget {
     final recordings = ref.watch(recordingsProvider);
 
     return recordings.when(
-      loading: () => const Scaffold(
-          body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('$e'))),
       data: (items) {
         final recording = items.where((r) => r.id == recordingId).firstOrNull;
@@ -99,6 +101,7 @@ class _NoteView extends ConsumerWidget {
                 onPressed: () => openExportSheet(
                   context,
                   note: note,
+                  recording: recording,
                   recordedOn: DateFormat.yMMMd().format(recording.startedAt),
                 ),
               ),
@@ -113,8 +116,8 @@ class _NoteView extends ConsumerWidget {
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'Notes'),
-              Tab(text: 'Board'),
-              Tab(text: 'Timeline'),
+              Tab(text: 'Gantt'),
+              Tab(text: 'Calendar'),
               Tab(text: 'Study'),
               Tab(text: 'Transcript'),
             ],
@@ -124,8 +127,8 @@ class _NoteView extends ConsumerWidget {
             ? const _NotStructuredYet()
             : TabBarView(children: [
                 _NotesTab(note: note, recording: recording),
-                BoardView(recordingId: recording.id, note: note),
                 TimelineView(recordingId: recording.id, note: note),
+                CalendarView(recordingId: recording.id, note: note),
                 _StudyTab(note: note),
                 _TranscriptTab(note: note, recording: recording),
               ]),
@@ -211,8 +214,8 @@ class _NotesTab extends StatelessWidget {
           for (final decision in note.decisions)
             _Cited(
               quote: decision.sourceRef.quote,
-              child: Text(decision.statement,
-                  style: theme.textTheme.bodyMedium),
+              child:
+                  Text(decision.statement, style: theme.textTheme.bodyMedium),
             ),
         ],
         if (note.openQuestions.isNotEmpty) ...[
@@ -222,8 +225,7 @@ class _NotesTab extends StatelessWidget {
           for (final question in note.openQuestions)
             _Cited(
               quote: question.sourceRef.quote,
-              child:
-                  Text(question.question, style: theme.textTheme.bodyMedium),
+              child: Text(question.question, style: theme.textTheme.bodyMedium),
             ),
         ],
         const SizedBox(height: 32),
@@ -242,7 +244,9 @@ class _StudyTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (note.keyConcepts.isEmpty && note.flashcards.isEmpty && note.quiz.isEmpty) {
+    if (note.keyConcepts.isEmpty &&
+        note.flashcards.isEmpty &&
+        note.quiz.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -376,9 +380,8 @@ class _QuizTileState extends State<_QuizTile> {
             const SizedBox(height: 8),
             RadioGroup<int>(
               groupValue: _selected,
-              onChanged: _checked
-                  ? (_) {}
-                  : (v) => setState(() => _selected = v),
+              onChanged:
+                  _checked ? (_) {} : (v) => setState(() => _selected = v),
               child: Column(
                 children: [
                   for (var i = 0; i < widget.question.choices.length; i++)
@@ -409,8 +412,9 @@ class _QuizTileState extends State<_QuizTile> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed:
-                      _selected == null ? null : () => setState(() => _checked = true),
+                  onPressed: _selected == null
+                      ? null
+                      : () => setState(() => _checked = true),
                   child: const Text('Check answer'),
                 ),
               )
@@ -439,18 +443,115 @@ class _QuizTileState extends State<_QuizTile> {
   }
 }
 
-class _TranscriptTab extends StatefulWidget {
+class _TranscriptTab extends ConsumerStatefulWidget {
   const _TranscriptTab({required this.note, required this.recording});
 
   final NoteDocument note;
   final db.Recording recording;
 
   @override
-  State<_TranscriptTab> createState() => _TranscriptTabState();
+  ConsumerState<_TranscriptTab> createState() => _TranscriptTabState();
 }
 
-class _TranscriptTabState extends State<_TranscriptTab> {
+class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
   bool _showRaw = false;
+  Map<String, String> _editedNames = const {};
+
+  List<_SpeakerSegment> get _segments {
+    final raw = widget.recording.transcriptSegmentsJson;
+    if (raw == null) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return decoded.whereType<Map>().map((item) {
+        return _SpeakerSegment(
+          startMs: item['startMs'] as int? ?? 0,
+          endMs: item['endMs'] as int? ?? 0,
+          text: item['text'] as String? ?? '',
+          speaker: item['speaker'] as String?,
+        );
+      }).toList();
+    } on Object {
+      return const [];
+    }
+  }
+
+  Map<String, String> get _speakerNames {
+    final raw = widget.recording.speakerNamesJson;
+    if (raw == null) return _editedNames;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return _editedNames;
+      return {
+        ...decoded.map((key, value) => MapEntry('$key', '$value')),
+        ..._editedNames,
+      };
+    } on Object {
+      return _editedNames;
+    }
+  }
+
+  Future<void> _editSpeakerNames() async {
+    final labels = _segments
+        .map((segment) => segment.speaker)
+        .whereType<String>()
+        .toSet()
+        .toList();
+    if (labels.isEmpty) return;
+    final controllers = {
+      for (final label in labels)
+        label: TextEditingController(text: _speakerNames[label] ?? label),
+    };
+    final names = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Name speakers'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final label in labels)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextField(
+                    controller: controllers[label],
+                    decoration: InputDecoration(labelText: label),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              context,
+              {
+                for (final label in labels)
+                  label: controllers[label]!.text.trim().isEmpty
+                      ? label
+                      : controllers[label]!.text.trim(),
+              },
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final controller in controllers.values) {
+        controller.dispose();
+      }
+    });
+    if (names == null || !mounted) return;
+    setState(() => _editedNames = names);
+    await ref
+        .read(repositoryProvider)
+        .saveSpeakerNames(widget.recording.id, names);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -464,35 +565,80 @@ class _TranscriptTabState extends State<_TranscriptTab> {
 
     final showingRaw = _showRaw || cleaned == null;
     final text = (showingRaw ? raw : cleaned) ?? raw ?? '';
+    final segments = showingRaw ? _segments : const <_SpeakerSegment>[];
+    final hasSpeakerLabels = segments.any((segment) => segment.speaker != null);
 
     return Column(
       children: [
-        if (cleaned != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: false, label: Text('Cleaned')),
-                  ButtonSegment(value: true, label: Text('Raw')),
-                ],
-                selected: {showingRaw},
-                onSelectionChanged: (s) =>
-                    setState(() => _showRaw = s.first),
-              ),
-            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
+          child: Row(
+            children: [
+              if (cleaned != null)
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Cleaned')),
+                    ButtonSegment(value: true, label: Text('Raw')),
+                  ],
+                  selected: {showingRaw},
+                  onSelectionChanged: (s) => setState(() => _showRaw = s.first),
+                ),
+              if (hasSpeakerLabels) ...[
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.people_outline),
+                  tooltip: 'Edit speaker names',
+                  onPressed: _editSpeakerNames,
+                ),
+              ],
+            ],
           ),
+        ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-            child: SelectableText(text.isEmpty ? 'No transcript was stored.' : text,
-                style: theme.textTheme.bodyMedium),
+            child: segments.isNotEmpty
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final segment in segments)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: SelectableText(
+                            '${_timestamp(segment.startMs)}  '
+                            '${segment.speaker == null ? '' : '${_speakerNames[segment.speaker] ?? segment.speaker}: '}'
+                            '${segment.text}',
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
+                    ],
+                  )
+                : SelectableText(
+                    text.isEmpty ? 'No transcript was stored.' : text,
+                    style: theme.textTheme.bodyMedium,
+                  ),
           ),
         ),
       ],
     );
   }
+
+  static String _timestamp(int ms) =>
+      formatDuration(Duration(milliseconds: ms));
+}
+
+class _SpeakerSegment {
+  const _SpeakerSegment({
+    required this.startMs,
+    required this.endMs,
+    required this.text,
+    this.speaker,
+  });
+
+  final int startMs;
+  final int endMs;
+  final String text;
+  final String? speaker;
 }
 
 /// The pre-Phase-2 reading view: what could be reconstructed from the note's cited

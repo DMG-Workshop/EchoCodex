@@ -221,15 +221,16 @@ class NoteExporters {
       if (task.dueDate == null || task.dateBasis == DateBasis.absent) continue;
 
       out
-        ..writeln('BEGIN:VTODO')
+        ..writeln('BEGIN:VEVENT')
         ..writeln('UID:${task.id}@transcript.app')
         ..writeln('DTSTAMP:$now')
         ..writeln('SUMMARY:${_icsText(task.title)}')
-        ..writeln('DUE;VALUE=DATE:${_icsDate(task.dueDate!)}')
+        ..writeln('DTSTART;VALUE=DATE:${_icsDate(task.dueDate!)}')
+        ..writeln('DTEND;VALUE=DATE:${_icsDate(task.dueDate!)}')
         ..writeln(
             'STATUS:${task.status == TaskStatus.done ? 'COMPLETED' : 'NEEDS-ACTION'}')
         ..writeln('DESCRIPTION:${_icsText(_jiraDescription(task))}')
-        ..writeln('END:VTODO');
+        ..writeln('END:VEVENT');
     }
 
     for (final anchor in note.timelineAnchors) {

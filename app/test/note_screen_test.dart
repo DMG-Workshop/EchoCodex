@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/data/database.dart' as db;
-import 'package:transcript_app/src/recording/recording_controller.dart';
-import 'package:transcript_app/src/screens/note_screen.dart';
+import 'package:echo_codex_app/src/data/database.dart' as db;
+import 'package:echo_codex_app/src/recording/recording_controller.dart';
+import 'package:echo_codex_app/src/screens/note_screen.dart';
 
 import 'fixtures.dart';
 
@@ -41,42 +41,6 @@ void main() {
         reason: 'provenance is shown, not hidden behind a tap');
   });
 
-  testWidgets('a spoken date and an undated task are rendered differently',
-      (tester) async {
-    await pumpNote(tester, recordingRow());
-    await tester.tap(find.text('Board'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('2026-09-18'), findsOneWidget);
-    expect(find.text('no date discussed'), findsOneWidget,
-        reason: 'an undated task says so rather than showing a guessed date');
-    expect(find.textContaining('need dates'), findsOneWidget,
-        reason: 'the board counts what still needs dating');
-  });
-
-  testWidgets('an inferred date is labelled as inferred', (tester) async {
-    final note = noteJson();
-    final task = (note['tasks'] as List<dynamic>).first as Map<String, dynamic>;
-    task['dateBasis'] = 'inferred';
-    task['dueDate'] = '2026-09-30';
-
-    await pumpNote(tester, recordingRow(overrideNote: jsonEncode(note)));
-    await tester.tap(find.text('Board'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('2026-09-30 · inferred'), findsOneWidget,
-        reason: 'a derived date must never look like one that was spoken');
-  });
-
-  testWidgets('the owner is shown when someone took the work', (tester) async {
-    await pumpNote(tester, recordingRow());
-    await tester.tap(find.text('Board'));
-    await tester.pumpAndSettle();
-
-    // Once on the card, once as a filter chip.
-    expect(find.text('Priya'), findsWidgets);
-  });
-
   testWidgets('unclear audio is flagged rather than presented as clean',
       (tester) async {
     final note = noteJson();
@@ -84,19 +48,6 @@ void main() {
 
     await pumpNote(tester, recordingRow(overrideNote: jsonEncode(note)));
     expect(find.textContaining('hard to make out'), findsOneWidget);
-  });
-
-  testWidgets('no action items says so plainly, and offers to add one',
-      (tester) async {
-    final note = noteJson()..['tasks'] = <Object>[];
-
-    await pumpNote(tester, recordingRow(overrideNote: jsonEncode(note)));
-    await tester.tap(find.text('Board'));
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('No action items'), findsOneWidget);
-    expect(find.text('Add one yourself'), findsOneWidget,
-        reason: 'every extraction misses something, so the board must be correctable');
   });
 
   testWidgets('a recording whose structuring failed still opens', (tester) async {
@@ -149,6 +100,41 @@ void main() {
 
     expect(find.text('hello there'), findsOneWidget);
     expect(find.text('Raw'), findsNothing);
+  });
+
+  testWidgets('speaker labels are shown and can be renamed', (tester) async {
+    final segments = jsonEncode([
+      {
+        'startMs': 0,
+        'endMs': 1000,
+        'text': 'Hello there',
+        'speaker': 'SPEAKER_00',
+      },
+      {
+        'startMs': 1000,
+        'endMs': 2000,
+        'text': 'Hi',
+        'speaker': 'SPEAKER_01',
+      },
+    ]);
+    await pumpNote(
+      tester,
+      recordingRow(
+        transcriptText: 'Hello there Hi',
+        transcriptSegmentsJson: segments,
+      ),
+    );
+    await tester.tap(find.text('Transcript'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('SPEAKER_00'), findsOneWidget);
+    await tester.tap(find.byTooltip('Edit speaker names'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Alice');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Alice: Hello there'), findsOneWidget);
   });
 
   testWidgets('no study aids says so, rather than an empty tab', (tester) async {

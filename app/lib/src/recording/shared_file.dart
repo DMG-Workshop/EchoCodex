@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
-/// Files handed to the app from outside: a share sheet, or "Open with KallaNotes".
+/// Files handed to the app from outside: a share sheet, or "Open with Echo Codex".
 ///
 /// Two paths, because a share can arrive either way round: the app may already be running
 /// (a live event), or it may have been launched by the share itself, in which case the

@@ -1,7 +1,8 @@
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/data/database.dart';
-import 'package:transcript_app/src/data/repository.dart';
+import 'package:echo_codex_app/src/data/database.dart';
+import 'package:echo_codex_app/src/data/repository.dart';
 import 'package:transcript_core/transcript_core.dart' as core;
 
 void main() {
@@ -93,5 +94,43 @@ void main() {
     expect((await repository.byId('r1'))!.priority, isFalse);
     await repository.setPriority('r1', true);
     expect((await repository.byId('r1'))!.priority, isTrue);
+  });
+
+  test('processing queue reports failed chunks and retries them', () async {
+    await db.into(db.recordings).insert(
+          RecordingsCompanion.insert(id: 'r1', startedAt: DateTime.now()),
+        );
+    await db.batch((batch) => batch.insertAll(db.chunks, [
+          ChunksCompanion.insert(
+            id: 'r1_c0',
+            recordingId: 'r1',
+            chunkIndex: 0,
+            startMs: 0,
+            contentStartMs: 0,
+            endMs: 1000,
+            state: ChunkState.transcribed,
+          ),
+          ChunksCompanion.insert(
+            id: 'r1_c1',
+            recordingId: 'r1',
+            chunkIndex: 1,
+            startMs: 1000,
+            contentStartMs: 1000,
+            endMs: 2000,
+            state: ChunkState.failed,
+            error: const Value('network unavailable'),
+          ),
+        ]));
+
+    final item = (await repository.processingQueue()).single;
+    expect(item.completed, 1);
+    expect(item.failed, 1);
+    expect(item.retryable, 1);
+
+    await repository.retryRecording('r1');
+    final chunks = await (db.select(db.chunks)..where((c) => c.recordingId.equals('r1'))).get();
+    expect(chunks.every((chunk) => chunk.state == ChunkState.pending ||
+        chunk.state == ChunkState.transcribed), isTrue);
+    expect(chunks.last.error, isNull);
   });
 }

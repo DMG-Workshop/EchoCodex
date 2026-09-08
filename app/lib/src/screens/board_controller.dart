@@ -6,28 +6,64 @@ import '../recording/recording_controller.dart';
 
 /// Which cards the board is showing.
 class BoardFilter {
-  const BoardFilter({this.assigneeId, this.priority, this.unassignedOnly = false});
+  const BoardFilter({
+    this.assigneeId,
+    this.priority,
+    this.status,
+    this.dueOnly = false,
+    this.unassignedOnly = false,
+  });
 
   final String? assigneeId;
   final TaskPriority? priority;
+  final TaskStatus? status;
+  final bool dueOnly;
   final bool unassignedOnly;
 
   bool get isActive =>
-      assigneeId != null || priority != null || unassignedOnly;
+      assigneeId != null ||
+      priority != null ||
+      status != null ||
+      dueOnly ||
+      unassignedOnly;
 
   BoardFilter copyWith({
     Object? assigneeId = _unset,
     Object? priority = _unset,
+    Object? status = _unset,
+    bool? dueOnly,
     bool? unassignedOnly,
   }) =>
       BoardFilter(
-        assigneeId:
-            identical(assigneeId, _unset) ? this.assigneeId : assigneeId as String?,
+        assigneeId: identical(assigneeId, _unset)
+            ? this.assigneeId
+            : assigneeId as String?,
         priority: identical(priority, _unset)
             ? this.priority
             : priority as TaskPriority?,
+        status: identical(status, _unset) ? this.status : status as TaskStatus?,
+        dueOnly: dueOnly ?? this.dueOnly,
         unassignedOnly: unassignedOnly ?? this.unassignedOnly,
       );
+
+  Map<String, dynamic> toJson() => {
+        'assigneeId': assigneeId,
+        'priority': priority?.name,
+        'status': status?.name,
+        'dueOnly': dueOnly,
+        'unassignedOnly': unassignedOnly,
+      };
+
+  factory BoardFilter.fromJson(Map<String, dynamic> json) => BoardFilter(
+        assigneeId: json['assigneeId'] as String?,
+        priority: _enumValue(TaskPriority.values, json['priority']),
+        status: _enumValue(TaskStatus.values, json['status']),
+        dueOnly: json['dueOnly'] as bool? ?? false,
+        unassignedOnly: json['unassignedOnly'] as bool? ?? false,
+      );
+
+  static T? _enumValue<T extends Enum>(List<T> values, Object? name) =>
+      values.where((value) => value.name == name).firstOrNull;
 
   static const Object _unset = Object();
 }
@@ -70,7 +106,8 @@ final boardEditorProvider = Provider<BoardEditor>(
 /// Every extraction misses something, so the board has to be correctable. A manual task
 /// carries no `sourceRef` quote it could honestly cite, so it gets an explicit marker
 /// instead — never a fabricated one.
-NoteTask manualTask({required String title, TaskStatus status = TaskStatus.todo}) =>
+NoteTask manualTask(
+        {required String title, TaskStatus status = TaskStatus.todo}) =>
     NoteTask(
       id: 'manual_${DateTime.now().microsecondsSinceEpoch}',
       title: title,

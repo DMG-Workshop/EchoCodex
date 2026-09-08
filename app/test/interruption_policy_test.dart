@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/recording/interruption_policy.dart';
+import 'package:echo_codex_app/src/recording/interruption_policy.dart';
 
 void main() {
   const policy = InterruptionPolicy();

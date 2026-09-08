@@ -43,6 +43,12 @@ class Recordings extends Table {
   /// through an edited version of it.
   TextColumn get transcriptText => text().nullable()();
 
+  /// Timestamped transcript segments, including provider speaker labels.
+  TextColumn get transcriptSegmentsJson => text().nullable()();
+
+  /// User-edited names keyed by the provider's speaker label.
+  TextColumn get speakerNamesJson => text().nullable()();
+
   /// [transcriptText] with filler words and stutters removed, when the punctuation and
   /// filler cleanup workflow feature is on. Null when the feature is off or cleanup has
   /// not run for this recording.
@@ -51,6 +57,12 @@ class Recordings extends Table {
   /// Marked to jump the backlog when several recordings are waiting to be transcribed —
   /// see the priority transcription queue workflow feature.
   BoolColumn get priority => boolean().withDefault(const Constant(false))();
+
+  /// When true, this recording may only use on-device or user-owned local providers.
+  BoolColumn get localOnly => boolean().withDefault(const Constant(false))();
+
+  /// The template used to structure this recording, if any.
+  TextColumn get templateId => text().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -95,6 +107,41 @@ class Chunks extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+class NoteTemplates extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get instructions => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class ActionReminders extends Table {
+  TextColumn get id => text()();
+  TextColumn get recordingId =>
+      text().references(Recordings, #id, onDelete: KeyAction.cascade)();
+  TextColumn get taskId => text()();
+  TextColumn get title => text()();
+  DateTimeColumn get remindAt => dateTime()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  BoolColumn get completed => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class PrivacyAudits extends Table {
+  TextColumn get id => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  TextColumn get action => text()();
+  TextColumn get detail => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 enum ChunkState {
   pending,
   uploading,
@@ -108,14 +155,16 @@ enum ChunkState {
   failed,
 }
 
-@DriftDatabase(tables: [Recordings, Chunks])
+@DriftDatabase(
+  tables: [Recordings, Chunks, NoteTemplates, ActionReminders, PrivacyAudits],
+)
 class TranscriptDatabase extends _$TranscriptDatabase {
   TranscriptDatabase() : super(_open());
 
   TranscriptDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -124,6 +173,17 @@ class TranscriptDatabase extends _$TranscriptDatabase {
             await m.addColumn(recordings, recordings.transcriptText);
             await m.addColumn(recordings, recordings.cleanedTranscriptText);
             await m.addColumn(recordings, recordings.priority);
+          }
+          if (from < 3) {
+            await m.addColumn(recordings, recordings.localOnly);
+            await m.addColumn(recordings, recordings.templateId);
+          }
+          if (from < 4) {
+            await m.addColumn(recordings, recordings.transcriptSegmentsJson);
+            await m.addColumn(recordings, recordings.speakerNamesJson);
+          }
+          if (from < 5) {
+            await m.createTable(privacyAudits);
           }
         },
         beforeOpen: (details) async {
@@ -190,6 +250,17 @@ class TranscriptDatabase extends _$TranscriptDatabase {
         .get();
     return pending.isEmpty;
   }
+
+  /// Returns every chunk that can be retried manually, including failures that the
+  /// automatic backoff has stopped retrying.
+  Future<void> retryRecording(String recordingId) =>
+      (update(chunks)..where((c) => c.recordingId.equals(recordingId))).write(
+        const ChunksCompanion(
+          state: Value(ChunkState.pending),
+          nextAttemptAt: Value(null),
+          error: Value(null),
+        ),
+      );
 }
 
 LazyDatabase _open() => LazyDatabase(() async {

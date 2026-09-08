@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 import 'board_controller.dart';
+import '../recording/recording_controller.dart';
 
 /// Opens the editor for [task], or for a new task when it is null.
 Future<void> openTaskEditor(
@@ -86,6 +87,30 @@ class _TaskEditorState extends ConsumerState<TaskEditor> {
     await ref
         .read(boardEditorProvider)
         .upsert(widget.recordingId, widget.note, updated);
+    if (_dueDate != null && _dateBasis == DateBasis.explicit) {
+      final date = DateTime.tryParse(_dueDate!);
+      if (date != null) {
+        await ref.read(repositoryProvider).saveReminder(
+              recordingId: widget.recordingId,
+              taskId: updated.id,
+              title: updated.title,
+              remindAt: DateTime(date.year, date.month, date.day, 9),
+            );
+        await ref.read(reminderServiceProvider).schedule(
+              id: '${widget.recordingId}_${updated.id}',
+              title: updated.title,
+              remindAt: DateTime(date.year, date.month, date.day, 9),
+            );
+      }
+    } else {
+      await ref.read(repositoryProvider).deleteReminder(
+            widget.recordingId,
+            updated.id,
+          );
+      await ref.read(reminderServiceProvider).cancel(
+            '${widget.recordingId}_${updated.id}',
+          );
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -127,6 +152,13 @@ class _TaskEditorState extends ConsumerState<TaskEditor> {
                     icon: const Icon(Icons.delete_outline),
                     tooltip: 'Delete',
                     onPressed: () async {
+                      await ref.read(repositoryProvider).deleteReminder(
+                            widget.recordingId,
+                            widget.task!.id,
+                          );
+                      await ref.read(reminderServiceProvider).cancel(
+                            '${widget.recordingId}_${widget.task!.id}',
+                          );
                       await ref.read(boardEditorProvider).remove(
                           widget.recordingId, widget.note, widget.task!.id);
                       if (context.mounted) Navigator.of(context).pop();
@@ -146,55 +178,70 @@ class _TaskEditorState extends ConsumerState<TaskEditor> {
               onSubmitted: (_) => _save(),
             ),
             const SizedBox(height: 16),
-            _Label('Column'),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final status in TaskStatus.values)
-                  ChoiceChip(
-                    label: Text(_statusLabel(status)),
-                    selected: _status == status,
-                    onSelected: (_) => setState(() => _status = status),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _Label('Priority'),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final priority in TaskPriority.values)
-                  ChoiceChip(
-                    label: Text(priority.name),
-                    selected: _priority == priority,
-                    onSelected: (_) => setState(() => _priority = priority),
-                  ),
-              ],
-            ),
-            if (widget.note.participants.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _Label('Owner'),
-              Wrap(
+            Semantics(header: true, child: _Label('Column')),
+            Semantics(
+              label: 'Task status',
+              child: Wrap(
                 spacing: 8,
                 children: [
-                  for (final person in widget.note.participants)
+                  for (final status in TaskStatus.values)
                     ChoiceChip(
-                      label: Text(person.displayName),
-                      selected: _assigneeId == person.id,
-                      onSelected: (on) =>
-                          setState(() => _assigneeId = on ? person.id : null),
+                      label: Text(_statusLabel(status)),
+                      selected: _status == status,
+                      onSelected: (_) => setState(() => _status = status),
                     ),
                 ],
               ),
+            ),
+            const SizedBox(height: 16),
+            Semantics(header: true, child: _Label('Priority')),
+            Semantics(
+              label: 'Task priority',
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  for (final priority in TaskPriority.values)
+                    ChoiceChip(
+                      label: Text(priority.name),
+                      selected: _priority == priority,
+                      onSelected: (_) => setState(() => _priority = priority),
+                    ),
+                ],
+              ),
+            ),
+            if (widget.note.participants.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Semantics(header: true, child: _Label('Owner')),
+              Semantics(
+                label: 'Task owner',
+                child: Wrap(
+                  spacing: 8,
+                  children: [
+                    for (final person in widget.note.participants)
+                      ChoiceChip(
+                        label: Text(person.displayName),
+                        selected: _assigneeId == person.id,
+                        onSelected: (on) =>
+                            setState(() => _assigneeId = on ? person.id : null),
+                      ),
+                  ],
+                ),
+              ),
             ],
             const SizedBox(height: 16),
-            _Label('Due'),
+            Semantics(header: true, child: _Label('Due date')),
             Row(
               children: [
-                OutlinedButton.icon(
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.event, size: 18),
-                  label: Text(_dueDate ?? 'No date discussed'),
+                Semantics(
+                  button: true,
+                  label: _dueDate == null
+                      ? 'Choose due date'
+                      : 'Due date $_dueDate',
+                  child: OutlinedButton.icon(
+                    onPressed: _pickDate,
+                    icon: const Icon(Icons.event, size: 18),
+                    label: Text(_dueDate ?? 'No date discussed'),
+                  ),
                 ),
                 if (_dueDate != null)
                   IconButton(
@@ -226,7 +273,12 @@ class _TaskEditorState extends ConsumerState<TaskEditor> {
                   child: const Text('Cancel'),
                 ),
                 const SizedBox(width: 8),
-                FilledButton(onPressed: _save, child: const Text('Save')),
+                Semantics(
+                  button: true,
+                  label: 'Save task',
+                  child:
+                      FilledButton(onPressed: _save, child: const Text('Save')),
+                ),
               ],
             ),
           ],

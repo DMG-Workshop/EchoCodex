@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:encrypt/encrypt.dart' as encryption;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -10,8 +12,22 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:share_plus/share_plus.dart';
 import 'package:transcript_core/transcript_core.dart';
 
+import '../data/database.dart' as db;
+
 /// What a note can be turned into on its way out of the app.
 enum ExportFormat {
+  archive(
+    label: 'Complete archive (ZIP)',
+    detail: 'Note, transcript, metadata, and source audio when available.',
+    extension: 'zip.enc',
+    mime: 'application/octet-stream',
+  ),
+  json(
+    label: 'JSON',
+    detail: 'The structured note in Echo Codex format.',
+    extension: 'json',
+    mime: 'application/json',
+  ),
   markdown(
     label: 'Markdown',
     detail: 'Notes, decisions and action items, for pasting into a doc.',
@@ -46,9 +62,9 @@ enum ExportFormat {
     mime: 'text/csv',
   ),
   calendar(
-    label: 'Calendar (.ics)',
+    label: 'Add to phone calendar (.ics)',
     detail:
-        'Dated tasks and milestones. Undated work is left out rather than guessed.',
+        'Share with Google Calendar, Apple Calendar, Outlook, or another calendar app.',
     extension: 'ics',
     mime: 'text/calendar',
   );
@@ -66,6 +82,10 @@ enum ExportFormat {
   final String mime;
 
   String render(NoteDocument note, {String? recordedOn}) => switch (this) {
+        ExportFormat.json =>
+          const JsonEncoder.withIndent('  ').convert(note.toJson()),
+        ExportFormat.archive =>
+          const JsonEncoder.withIndent('  ').convert(note.toJson()),
         ExportFormat.markdown =>
           NoteExporters.markdown(note, recordedOn: recordedOn),
         ExportFormat.pdf ||
@@ -80,18 +100,25 @@ enum ExportFormat {
 Future<void> openExportSheet(
   BuildContext context, {
   required NoteDocument note,
+  db.Recording? recording,
   String? recordedOn,
 }) =>
     showModalBottomSheet<void>(
       context: context,
-      builder: (context) => ExportSheet(note: note, recordedOn: recordedOn),
+      builder: (context) => ExportSheet(
+        note: note,
+        recording: recording,
+        recordedOn: recordedOn,
+      ),
     );
 
 /// Offers the note in each format, with a plain description of what each one keeps.
 class ExportSheet extends StatelessWidget {
-  const ExportSheet({super.key, required this.note, this.recordedOn});
+  const ExportSheet(
+      {super.key, required this.note, this.recording, this.recordedOn});
 
   final NoteDocument note;
+  final db.Recording? recording;
   final String? recordedOn;
 
   @override
@@ -145,7 +172,15 @@ class ExportSheet extends StatelessWidget {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     try {
-      final file = await _write(format);
+      final redact = await _askRedaction(context);
+      final passphrase =
+          format == ExportFormat.archive ? await _askPassphrase(context) : null;
+      if (format == ExportFormat.archive && passphrase == null) return;
+      final file = await _write(
+        format,
+        passphrase: passphrase,
+        redact: redact,
+      );
       await SharePlus.instance.share(ShareParams(
         files: [XFile(file.path, mimeType: format.mime)],
         subject: note.meta.title,
@@ -160,33 +195,185 @@ class ExportSheet extends StatelessWidget {
     }
   }
 
+  Future<bool> _askRedaction(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Redact sensitive details?'),
+        content: const Text(
+          'Remove email addresses, phone numbers, and street addresses locally before '
+          'creating this export. The original note stays unchanged.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep details'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Redact'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<String?> _askPassphrase(BuildContext context) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Protect archive'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Passphrase',
+            helperText: 'You will need this to open the archive later.',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Encrypt'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result?.trim().isEmpty == true ? null : result;
+  }
+
   Future<void> _copy(BuildContext context, ExportFormat format) async {
     final messenger = ScaffoldMessenger.of(context);
+    final redact = await _askRedaction(context);
     await Clipboard.setData(
-      ClipboardData(text: format.render(note, recordedOn: recordedOn)),
+      ClipboardData(
+        text: _redactText(
+          format.render(note, recordedOn: recordedOn),
+          enabled: redact,
+        ),
+      ),
     );
     messenger.showSnackBar(
       SnackBar(content: Text('${format.label} copied.')),
     );
   }
 
-  Future<File> _write(ExportFormat format) async {
+  Future<File> _write(
+    ExportFormat format, {
+    String? passphrase,
+    bool redact = false,
+  }) async {
     final dir = await getTemporaryDirectory();
     final name = '${_slug(note.meta.title)}.${format.extension}';
     final file = File(p.join(dir.path, name));
     final bytes = switch (format) {
-      ExportFormat.pdf => await _pdfBytes(),
-      ExportFormat.docx => _docxBytes(),
-      _ => utf8.encode(format.render(note, recordedOn: recordedOn)),
+      ExportFormat.archive =>
+        await _encryptedArchiveBytes(passphrase!, redact: redact),
+      ExportFormat.pdf => await _pdfBytes(redact: redact),
+      ExportFormat.docx => _docxBytes(redact: redact),
+      _ => utf8.encode(
+          _redactText(format.render(note, recordedOn: recordedOn),
+              enabled: redact),
+        ),
     };
     await file.writeAsBytes(bytes);
     return file;
   }
 
-  Future<List<int>> _pdfBytes() async {
+  Future<List<int>> _encryptedArchiveBytes(
+    String passphrase, {
+    required bool redact,
+  }) async {
+    final plain = await _archiveBytes(redact: redact);
+    final keyBytes = crypto.sha256.convert(utf8.encode(passphrase)).bytes;
+    final key = encryption.Key(Uint8List.fromList(keyBytes));
+    final iv = encryption.IV.fromSecureRandom(16);
+    final encrypted = encryption.Encrypter(encryption.AES(key)).encryptBytes(
+      plain,
+      iv: iv,
+    );
+    return [
+      ...utf8.encode('ECHO-CODEX-ARCHIVE-V1\n'),
+      ...iv.bytes,
+      ...encrypted.bytes,
+    ];
+  }
+
+  Future<List<int>> _archiveBytes({bool redact = false}) async {
+    final archive = Archive();
+    archive.addFile(ArchiveFile.string(
+      'note.json',
+      _redactText(
+        const JsonEncoder.withIndent('  ').convert(note.toJson()),
+        enabled: redact,
+      ),
+    ));
+    if (recording != null) {
+      archive.addFile(ArchiveFile.string(
+        'metadata.json',
+        const JsonEncoder.withIndent('  ').convert({
+          'id': recording!.id,
+          'title': _redactText(recording!.title, enabled: redact),
+          'startedAt': recording!.startedAt.toIso8601String(),
+          'durationMs': recording!.durationMs,
+          'transcriptionProviderId': recording!.transcriptionProviderId,
+          'structuringProviderId': recording!.structuringProviderId,
+          'structuringModel': recording!.structuringModel,
+          'noteSchemaVersion': recording!.noteSchemaVersion,
+          'promptVersion': recording!.promptVersion,
+          'localOnly': recording!.localOnly,
+        }),
+      ));
+      if (recording!.transcriptText != null) {
+        archive.addFile(ArchiveFile.string(
+          'transcript.txt',
+          _redactText(recording!.transcriptText!, enabled: redact),
+        ));
+      }
+      final audioPath = recording!.audioPath;
+      if (audioPath != null) {
+        final audio = File(audioPath);
+        if (audio.existsSync()) {
+          archive.addFile(ArchiveFile.bytes(
+            p.basename(audioPath),
+            audio.readAsBytesSync(),
+          ));
+        }
+      }
+    }
+    return ZipEncoder().encodeBytes(archive);
+  }
+
+  static String _redactText(String text, {required bool enabled}) {
+    if (!enabled) return text;
+    return text
+        .replaceAll(RegExp(r'[\w.+-]+@[\w-]+\.[\w.-]+'), '[redacted email]')
+        .replaceAll(
+          RegExp(r'(?<!\w)\+?\d[\d ()-]{7,}\d(?!\w)'),
+          '[redacted phone]',
+        )
+        .replaceAll(
+          RegExp(
+            r'\b\d{1,5}\s+\w+(?:\s+\w+){0,3}\s+(?:St|Street|Rd|Road|Ave|Avenue|Blvd|Lane|Ln)\b',
+            caseSensitive: false,
+          ),
+          '[redacted address]',
+        );
+  }
+
+  Future<List<int>> _pdfBytes({required bool redact}) async {
     final document = pw.Document(title: note.meta.title);
-    final lines =
-        NoteExporters.markdown(note, recordedOn: recordedOn).split('\n');
+    final lines = _redactText(
+      NoteExporters.markdown(note, recordedOn: recordedOn),
+      enabled: redact,
+    ).split('\n');
     document.addPage(pw.MultiPage(
       build: (_) => [
         for (final line in lines)
@@ -199,18 +386,22 @@ class ExportSheet extends StatelessWidget {
     return document.save();
   }
 
-  List<int> _docxBytes() {
+  List<int> _docxBytes({required bool redact}) {
     final archive = Archive()
       ..addFile(ArchiveFile.string('[Content_Types].xml', _contentTypes))
       ..addFile(ArchiveFile.string('_rels/.rels', _rootRelationships))
-      ..addFile(ArchiveFile.string('word/document.xml', _documentXml()))
+      ..addFile(
+          ArchiveFile.string('word/document.xml', _documentXml(redact: redact)))
       ..addFile(ArchiveFile.string(
           'word/_rels/document.xml.rels', _documentRelationships));
     return ZipEncoder().encodeBytes(archive);
   }
 
-  String _documentXml() {
-    final paragraphs = NoteExporters.markdown(note, recordedOn: recordedOn)
+  String _documentXml({required bool redact}) {
+    final paragraphs = _redactText(
+      NoteExporters.markdown(note, recordedOn: recordedOn),
+      enabled: redact,
+    )
         .split('\n')
         .map((line) =>
             '<w:p><w:r><w:t xml:space="preserve">${_xml(line.isEmpty ? ' ' : line)}</w:t></w:r></w:p>')

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:transcript_core/transcript_core.dart';
@@ -294,6 +296,8 @@ class SettingsStore {
   static const _kOnboarded = 'onboarding.completed';
   static const _kRecordingsDir = 'recordings.dirPath';
   static const _kWorkflowPrefix = 'workflow.';
+  static const _kTemplateId = 'workflow.templateId';
+  static const _kAutoDeleteAudio = 'privacy.autoDeleteSourceAudio';
 
   /// A folder the user picked instead of the app's own storage, or null for the
   /// default. New recordings go here; recordings already saved elsewhere are not moved.
@@ -342,6 +346,42 @@ class SettingsStore {
 
   Future<void> setWorkflowEnabled(String key, bool enabled) =>
       _prefs.setBool('$_kWorkflowPrefix$key', enabled);
+
+  String? get activeTemplateId => _prefs.getString(_kTemplateId);
+
+  Future<void> setActiveTemplateId(String? id) => id == null
+      ? _prefs.remove(_kTemplateId)
+      : _prefs.setString(_kTemplateId, id);
+
+  bool get autoDeleteSourceAudio => _prefs.getBool(_kAutoDeleteAudio) ?? false;
+
+  Future<void> setAutoDeleteSourceAudio(bool enabled) =>
+      _prefs.setBool(_kAutoDeleteAudio, enabled);
+
+  static const _kSavedBoardViews = 'workflow.savedBoardViews';
+
+  Map<String, Map<String, dynamic>> get savedBoardViews {
+    final raw = _prefs.getString(_kSavedBoardViews);
+    if (raw == null) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const {};
+      return {
+        for (final entry in decoded.entries)
+          '${entry.key}': Map<String, dynamic>.from(entry.value as Map),
+      };
+    } on Object {
+      return const {};
+    }
+  }
+
+  Future<void> saveBoardView(String name, Map<String, dynamic> filter) async {
+    final views = {
+      ...savedBoardViews,
+      name: filter,
+    };
+    await _prefs.setString(_kSavedBoardViews, jsonEncode(views));
+  }
 
   String get transcriptionLanguage =>
       _prefs.getString('${_kWorkflowPrefix}language') ?? 'en-US';

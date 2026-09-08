@@ -1,7 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:transcript_app/src/data/chunk_store.dart';
-import 'package:transcript_app/src/data/database.dart';
+import 'package:echo_codex_app/src/data/chunk_store.dart';
+import 'package:echo_codex_app/src/data/database.dart';
 import 'package:transcript_core/transcript_core.dart' as core;
 
 void main() {

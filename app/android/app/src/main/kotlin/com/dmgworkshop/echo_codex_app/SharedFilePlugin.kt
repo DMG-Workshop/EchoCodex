@@ -1,4 +1,4 @@
-package com.dmgworkshop.transcript_app
+package com.dmgworkshop.echo_codex_app
 
 import android.content.Intent
 import android.net.Uri
