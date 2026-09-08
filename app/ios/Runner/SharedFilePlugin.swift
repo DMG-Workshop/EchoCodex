@@ -52,10 +52,10 @@ final class SharedFilePlugin: NSObject, FlutterSceneLifeCycleDelegate {
   /// A cold launch: the app was not running when the user chose it.
   func scene(
     _ scene: UIScene,
-    willConnectToSession session: UISceneSession,
-    options connectionOptions: UISceneConnectionOptions?
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
   ) -> Bool {
-    guard let contexts = connectionOptions?.urlContexts else { return false }
+    guard let contexts = connectionOptions.urlContexts else { return false }
     return handle(urls: contexts.map { $0.url })
   }
 
