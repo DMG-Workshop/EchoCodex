@@ -1,0 +1,5 @@
+[Runtime]
+name=com.dmgworkshop.echo_codex_app.Debug
+
+[ExtensionOf]
+ref=app/com.dmgworkshop.echo_codex_app/x86_64/master
