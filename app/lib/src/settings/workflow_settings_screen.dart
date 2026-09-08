@@ -88,6 +88,10 @@ class _WorkflowSettingsScreenState
                   'from Zoom or Teams, a lecture, a voice memo.'),
           _toggle(store, 'videoImport', 'Import video',
               'Take the audio track out of MP4, M4V and MOV files.'),
+          _toggle(store, 'deviceAudioCapture', 'Record device audio (Android)',
+              'Record what this device is playing — a recorded webinar or lecture. '
+                  'Not calls: Android reserves call audio, so Zoom, Teams and Meet '
+                  'come through silent.'),
           const _MeetingCaptureNote(),
           const _SectionHeader('History and feedback'),
           _toggle(store, 'searchableHistory', 'Searchable local history',
@@ -149,9 +153,10 @@ class _MeetingCaptureNote extends StatelessWidget {
             Text(
               'No app can capture another app\'s call audio on iOS or Android — the '
               'platforms block it, and one that claims otherwise is recording your '
-              'microphone. Two things do work: record the meeting through the '
-              'microphone with it played out loud, or import the recording the '
-              'meeting tool saved afterwards.',
+              'microphone. Three things do work: record the meeting through the '
+              'microphone with it played out loud, import the recording the meeting '
+              'tool saved afterwards, or — on Android, for a recorded webinar rather '
+              'than a live call — record device audio with the setting above.',
               style: theme.textTheme.bodySmall,
             ),
           ],
