@@ -53,9 +53,9 @@ final class SharedFilePlugin: NSObject, FlutterSceneLifeCycleDelegate {
   func scene(
     _ scene: UIScene,
     willConnectTo session: UISceneSession,
-    options connectionOptions: UIScene.ConnectionOptions
+    options connectionOptions: UIScene.ConnectionOptions?
   ) -> Bool {
-    guard let contexts = connectionOptions.urlContexts else { return false }
+    guard let contexts = connectionOptions?.urlContexts else { return false }
     return handle(urls: contexts.map { $0.url })
   }
 
