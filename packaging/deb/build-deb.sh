@@ -3,7 +3,7 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 app_dir="$repo_root/app"
-version="0.5.2~alpha.1-1"
+version="0.6.0-1"
 arch="$(dpkg --print-architecture)"
 package="echo-codex"
 out_dir="$repo_root/dist"
@@ -44,7 +44,7 @@ Priority: optional
 Architecture: $arch
 Maintainer: DMG Workshop <hello@echocodex.xyz>
 Homepage: https://echocodex.xyz
-Depends: libc6, libgcc-s1, libstdc++6, libgtk-3-0 | libgtk-3-0t64, libgl1, libegl1, libasound2 | libasound2t64
+Depends: libc6, libgcc-s1, libstdc++6, libgtk-3-0 | libgtk-3-0t64, libgl1, libegl1, libasound2 | libasound2t64, ffmpeg
 Description: Private recordings turned into structured notes
  Echo Codex records speech and turns it into structured notes, tasks,
  timelines, and calendar exports using AI providers selected by the user.
