@@ -60,7 +60,9 @@ class _BenchmarkScreenState extends ConsumerState<BenchmarkScreen> {
                   ),
                 const SizedBox(height: 12),
                 FilledButton.tonalIcon(
-                  onPressed: () => setState(() => _benchmark = _run()),
+                  onPressed: () => setState(() {
+                    _benchmark = _run();
+                  }),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Refresh measurements'),
                 ),
