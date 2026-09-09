@@ -26,7 +26,7 @@ const String noteDocumentSchemaJson = r'''
       "properties": {
         "title": { "type": "string", "description": "Six words or fewer. Derived from content, never generic." },
         "summary": { "type": "string", "description": "2-4 sentences. What happened and what changed as a result." },
-        "recordingType": { "type": "string", "enum": ["meeting", "standup", "interview", "lecture", "voice_memo", "call", "other"] },
+        "recordingType": { "type": "string", "enum": ["meeting", "standup", "interview", "lecture", "voice_memo", "call", "game_session", "other"] },
         "language": { "type": "string", "description": "BCP-47 tag of the dominant spoken language, e.g. en-US." },
         "extractionConfidence": { "type": "string", "enum": ["high", "medium", "low"], "description": "low when audio was unclear, heavily cross-talked, or too short to structure." }
       }

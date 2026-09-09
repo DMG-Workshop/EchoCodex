@@ -47,6 +47,7 @@
             "lecture",
             "voice_memo",
             "call",
+            "game_session",
             "other"
           ]
         },

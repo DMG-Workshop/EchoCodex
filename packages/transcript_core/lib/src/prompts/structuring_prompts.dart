@@ -6,7 +6,7 @@
 class StructuringPrompts {
   const StructuringPrompts._();
 
-  static const String promptVersion = 'structuring/2026-09-07';
+  static const String promptVersion = 'structuring/2026-09-09';
 
   /// Byte-stable for a given recording context, so it sits behind a prompt-cache
   /// breakpoint and the volatile transcript follows it.
@@ -70,6 +70,19 @@ TASK TITLES
 Imperative and specific enough to act on without replaying the audio.
 Good: "Migrate the auth service off the legacy session store"
 Bad: "Auth", "Follow up on the thing Priya raised"
+
+GAME SESSIONS
+If this is a tabletop roleplaying session, set meta.recordingType to "game_session" and
+extract it as a story rather than a meeting:
+- sections[].heading names the scene or beat ("Ambush at the Redbridge toll"); the bullets
+  are what actually happened in the fiction.
+- Out-of-character table talk — rules arguments, snack runs, scheduling the next game — is
+  not the session. Leave it out unless it changed what happened.
+- decisions are what the party committed to, not options weighed aloud.
+- tasks are what they said they would do next: leads to chase, promises made to NPCs.
+- In-world time ("we ride at dawn") is not a real-world date. Use dateBasis "absent".
+- Invented names take the worst STT damage. Correct them from surrounding context and
+  record the misheard form in the participant's aliases.
 
 TRANSCRIPT QUALITY
 Transcripts contain STT errors. Silently correct obvious mishearings of names and technical

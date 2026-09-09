@@ -33,6 +33,7 @@ enum RecordingType {
   lecture,
   voiceMemo,
   call,
+  gameSession,
   other
 }
 
