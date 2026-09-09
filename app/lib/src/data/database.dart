@@ -142,6 +142,38 @@ class PrivacyAudits extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// The Codex: a personal library of notes the user keeps on purpose, independent of
+/// any one recording.
+///
+/// A Codex note may start life as a line copied out of a transcript, but from the
+/// moment it is saved it is its own row, not a view onto the recording. Deleting the
+/// recording — or its audio, or the whole transcript — must never take the note with
+/// it. [sourceRecordingId] is a soft, nullable link purely for "jump back to where
+/// this came from"; the foreign key's `onDelete: setNull` is what actually enforces
+/// the independence, so a vanished recording silently clears the pointer instead of
+/// cascading, and [sourceRecordingTitle] is snapshotted at save time so the note can
+/// still say where it came from after that.
+///
+/// Named `body` rather than `text`: a column getter called `text` shadows drift's own
+/// `Table.text()` builder and breaks every other column in the table (see [Chunks]).
+@DataClassName('CodexNote')
+class CodexNotes extends Table {
+  TextColumn get id => text()();
+  TextColumn get body => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  TextColumn get sourceRecordingId => text().nullable().references(
+        Recordings,
+        #id,
+        onDelete: KeyAction.setNull,
+      )();
+  TextColumn get sourceRecordingTitle => text().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 enum ChunkState {
   pending,
   uploading,
@@ -156,7 +188,14 @@ enum ChunkState {
 }
 
 @DriftDatabase(
-  tables: [Recordings, Chunks, NoteTemplates, ActionReminders, PrivacyAudits],
+  tables: [
+    Recordings,
+    Chunks,
+    NoteTemplates,
+    ActionReminders,
+    PrivacyAudits,
+    CodexNotes,
+  ],
 )
 class TranscriptDatabase extends _$TranscriptDatabase {
   TranscriptDatabase() : super(_open());
@@ -164,7 +203,7 @@ class TranscriptDatabase extends _$TranscriptDatabase {
   TranscriptDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -184,6 +223,9 @@ class TranscriptDatabase extends _$TranscriptDatabase {
           }
           if (from < 5) {
             await m.createTable(privacyAudits);
+          }
+          if (from < 6) {
+            await m.createTable(codexNotes);
           }
         },
         beforeOpen: (details) async {

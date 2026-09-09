@@ -824,6 +824,11 @@ final recordingsProvider = StreamProvider<List<Recording>>(
   (ref) => ref.watch(repositoryProvider).watchAll(),
 );
 
+/// The Codex: notes the user has kept on purpose, independent of any recording.
+final codexNotesProvider = StreamProvider<List<CodexNote>>(
+  (ref) => ref.watch(repositoryProvider).watchCodexNotes(),
+);
+
 /// SharedPreferences is async to open, so the app awaits it once at startup and
 /// overrides this provider with the resolved instance.
 final settingsStoreProvider = Provider<SettingsStore>(

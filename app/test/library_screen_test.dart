@@ -17,9 +17,11 @@ void main() {
   Future<void> pumpLibrary(
     WidgetTester tester, {
     List<db.Recording>? rows,
+    List<db.CodexNote> codexNotes = const [],
     Map<String, Object> settings = const {},
   }) async {
-    repo = FakeRecordingRepository(rows ?? [recordingRow()]);
+    repo = FakeRecordingRepository(rows ?? [recordingRow()],
+        codexNotes: codexNotes);
     SharedPreferences.setMockInitialValues(settings);
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
@@ -71,6 +73,60 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('A different recording'), findsOneWidget);
+  });
+
+  testWidgets(
+      'searching the home screen finds a Codex note alongside recordings',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      rows: [recordingRow()],
+      codexNotes: [
+        codexNoteRow(body: 'The bridge toll was ambushed at dusk.'),
+      ],
+    );
+
+    // Unfiltered: the Codex only surfaces once there is something to search for.
+    expect(find.text('The bridge toll was ambushed at dusk.'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'ambushed');
+    await tester.pumpAndSettle();
+
+    expect(find.text('The bridge toll was ambushed at dusk.'), findsOneWidget);
+    expect(find.text('Codex · 1'), findsOneWidget);
+    expect(find.text('Auth migration kickoff'), findsNothing,
+        reason: 'the recording does not mention an ambush');
+  });
+
+  testWidgets('a Codex result can be edited from the search list',
+      (tester) async {
+    await pumpLibrary(
+      tester,
+      rows: [recordingRow()],
+      codexNotes: [codexNoteRow(body: 'Original wording.')],
+    );
+
+    await tester.enterText(find.byType(TextField), 'Original');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Original wording.'));
+    await tester.pumpAndSettle();
+
+    final dialogField = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(dialogField, 'Edited wording.');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    // The old wording dropping out of a search still scoped to "Original" is what
+    // proves the edit actually persisted, rather than just echoing back what was typed.
+    expect(find.text('Original wording.'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), 'Edited');
+    await tester.pumpAndSettle();
+    expect(find.text('Edited wording.'), findsOneWidget);
   });
 
   testWidgets('an unfinished recording can be marked urgent', (tester) async {
