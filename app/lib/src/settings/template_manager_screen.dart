@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/database.dart' as db;
 import '../recording/recording_controller.dart';
 
 class TemplateManagerScreen extends ConsumerWidget {
@@ -78,39 +79,89 @@ class TemplateManagerScreen extends ConsumerWidget {
           if (templates.isEmpty) {
             return const Center(child: Text('No custom templates yet.'));
           }
-          return ListView.separated(
-            itemCount: templates.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final template = templates[index];
-              final active =
-                  ref.watch(settingsStoreProvider).activeTemplateId ==
-                      template.id;
-              return ListTile(
-                title: Text(template.name),
-                subtitle: Text(template.instructions),
-                isThreeLine: true,
-                leading: Icon(
-                    active ? Icons.check_circle : Icons.description_outlined),
-                onTap: () async {
-                  await ref.read(settingsStoreProvider).setActiveTemplateId(
-                        active ? null : template.id,
-                      );
-                  if (context.mounted) (context as Element).markNeedsBuild();
-                },
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  tooltip: 'Delete template',
-                  onPressed: () async {
-                    await repository.deleteTemplate(template.id);
-                    if (context.mounted) (context as Element).markNeedsBuild();
-                  },
+          // Presets are ordinary NoteTemplate rows seeded at install time (see
+          // TranscriptDatabase._seedSummaryPresets) — grouped here purely for display,
+          // so activation, deletion and everything else about them works unmodified.
+          final presets =
+              templates.where((t) => t.id.startsWith('preset_')).toList();
+          final custom =
+              templates.where((t) => !t.id.startsWith('preset_')).toList();
+          final activeId = ref.watch(settingsStoreProvider).activeTemplateId;
+          return ListView(
+            children: [
+              if (presets.isNotEmpty) ...[
+                const _SectionHeader('Summary presets'),
+                for (final template in presets)
+                  _TemplateTile(
+                    template: template,
+                    active: activeId == template.id,
+                    onDeleted: () => (context as Element).markNeedsBuild(),
+                  ),
+                const Divider(height: 1),
+              ],
+              if (custom.isNotEmpty) const _SectionHeader('Your templates'),
+              for (final template in custom)
+                _TemplateTile(
+                  template: template,
+                  active: activeId == template.id,
+                  onDeleted: () => (context as Element).markNeedsBuild(),
                 ),
-              );
-            },
+            ],
           );
         },
       ),
     );
   }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader(this.label);
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Text(
+          label,
+          style: Theme.of(context)
+              .textTheme
+              .labelLarge
+              ?.copyWith(color: Theme.of(context).colorScheme.primary),
+        ),
+      );
+}
+
+class _TemplateTile extends ConsumerWidget {
+  const _TemplateTile({
+    required this.template,
+    required this.active,
+    required this.onDeleted,
+  });
+
+  final db.NoteTemplate template;
+  final bool active;
+  final VoidCallback onDeleted;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ListTile(
+        title: Text(template.name),
+        subtitle: Text(template.instructions),
+        isThreeLine: true,
+        leading:
+            Icon(active ? Icons.check_circle : Icons.description_outlined),
+        onTap: () async {
+          await ref
+              .read(settingsStoreProvider)
+              .setActiveTemplateId(active ? null : template.id);
+          onDeleted();
+        },
+        trailing: IconButton(
+          icon: const Icon(Icons.delete_outline),
+          tooltip: 'Delete template',
+          onPressed: () async {
+            await ref.read(repositoryProvider).deleteTemplate(template.id);
+            onDeleted();
+          },
+        ),
+      );
 }

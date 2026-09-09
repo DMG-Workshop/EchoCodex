@@ -279,6 +279,61 @@ class _ProcessingQueuePanelState extends ConsumerState<_ProcessingQueuePanel> {
     _refresh();
   }
 
+  /// Corrects the language before a retry, for the common failure this queue actually
+  /// surfaces: auto-detect (or the global default) guessed wrong for this recording.
+  Future<void> _setLanguage(ProcessingQueueItem item) async {
+    final controller =
+        TextEditingController(text: item.recording.language ?? '');
+    final language = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Transcription language'),
+        content: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Language (BCP-47)',
+                  hintText: 'en-US, es-ES, fr-FR',
+                ),
+              ),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Choose language preset',
+              icon: const Icon(Icons.language),
+              onSelected: (value) => controller.text = value,
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'en-US', child: Text('English (US)')),
+                PopupMenuItem(value: 'en-GB', child: Text('English (UK)')),
+                PopupMenuItem(value: 'es-ES', child: Text('Spanish')),
+                PopupMenuItem(value: 'fr-FR', child: Text('French')),
+                PopupMenuItem(value: 'de-DE', child: Text('German')),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    if (language == null || !mounted) return;
+    await ref
+        .read(repositoryProvider)
+        .setLanguage(item.recording.id, language.isEmpty ? null : language);
+    _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<ProcessingQueueItem>>(
@@ -331,9 +386,21 @@ class _ProcessingQueuePanelState extends ConsumerState<_ProcessingQueuePanel> {
                       LinearProgressIndicator(value: item.fraction),
                     ],
                   ),
-                  trailing: TextButton(
-                    onPressed: () => _resume(item),
-                    child: Text(item.retryable > 0 ? 'Retry now' : 'Resume'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.language, size: 20),
+                        tooltip: item.recording.language == null
+                            ? 'Set transcription language'
+                            : 'Language: ${item.recording.language}',
+                        onPressed: () => _setLanguage(item),
+                      ),
+                      TextButton(
+                        onPressed: () => _resume(item),
+                        child: Text(item.retryable > 0 ? 'Retry now' : 'Resume'),
+                      ),
+                    ],
                   ),
                 ),
             ],

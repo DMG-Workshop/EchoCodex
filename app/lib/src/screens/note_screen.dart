@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 import '../data/database.dart' as db;
@@ -555,6 +557,130 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
   bool _showRaw = false;
   Map<String, String> _editedNames = const {};
 
+  AudioPlayer? _player;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  bool _playing = false;
+  StreamSubscription<Duration>? _positionSub;
+  StreamSubscription<Duration?>? _durationSub;
+  StreamSubscription<PlayerState>? _playerStateSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TranscriptTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A segment edit rewrites the recording row, which re-emits from the same watched
+    // stream this widget rebuilds from — reload only if the audio itself changed, or a
+    // routine correction would restart playback from zero every time.
+    if (oldWidget.recording.audioPath != widget.recording.audioPath) {
+      _teardownPlayer();
+      _initPlayer();
+    }
+  }
+
+  void _initPlayer() {
+    final path = widget.recording.audioPath;
+    if (path == null) return;
+    final player = AudioPlayer();
+    _player = player;
+    _positionSub = player.positionStream.listen((position) {
+      if (mounted) setState(() => _position = position);
+    });
+    _durationSub = player.durationStream.listen((duration) {
+      if (mounted) setState(() => _duration = duration ?? Duration.zero);
+    });
+    _playerStateSub = player.playerStateStream.listen((state) {
+      if (mounted) setState(() => _playing = state.playing);
+    });
+    unawaited(player.setFilePath(path).catchError((Object _, StackTrace __) {
+      // The file may have been moved or deleted since the recording was made; the
+      // transcript is still readable, it just cannot be played back or highlighted.
+      return null;
+    }));
+  }
+
+  void _teardownPlayer() {
+    unawaited(_positionSub?.cancel());
+    unawaited(_durationSub?.cancel());
+    unawaited(_playerStateSub?.cancel());
+    unawaited(_player?.dispose());
+    _player = null;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+    _playing = false;
+  }
+
+  @override
+  void dispose() {
+    _teardownPlayer();
+    super.dispose();
+  }
+
+  Future<void> _togglePlay() async {
+    final player = _player;
+    if (player == null) return;
+    if (player.playing) {
+      await player.pause();
+    } else {
+      await player.play();
+    }
+  }
+
+  /// Jumps playback to a tapped segment and starts it — the natural gesture when
+  /// listening back to check what was actually said around one line.
+  Future<void> _seekTo(int ms) async {
+    final player = _player;
+    if (player == null) return;
+    await player.seek(Duration(milliseconds: ms));
+    if (!player.playing) await player.play();
+  }
+
+  int _activeSegmentIndex(List<_SpeakerSegment> segments) {
+    if (_player == null) return -1;
+    final ms = _position.inMilliseconds;
+    for (var i = 0; i < segments.length; i++) {
+      if (ms >= segments[i].startMs && ms < segments[i].endMs) return i;
+    }
+    return -1;
+  }
+
+  /// Corrects a single misheard word or line — typically caught while listening back,
+  /// hence living right next to the playback controls rather than in a bulk editor.
+  Future<void> _editSegment(int index, _SpeakerSegment segment) async {
+    final controller = TextEditingController(text: segment.text);
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Correct this line'),
+        content: TextField(
+          controller: controller,
+          maxLines: null,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    if (text == null || text.isEmpty || text == segment.text || !mounted) return;
+    await ref
+        .read(repositoryProvider)
+        .updateTranscriptSegment(widget.recording.id, index, text);
+  }
+
   List<_SpeakerSegment> get _segments {
     final raw = widget.recording.transcriptSegmentsJson;
     if (raw == null) return const [];
@@ -665,6 +791,7 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
     final text = (showingRaw ? raw : cleaned) ?? raw ?? '';
     final segments = showingRaw ? _segments : const <_SpeakerSegment>[];
     final hasSpeakerLabels = segments.any((segment) => segment.speaker != null);
+    final activeIndex = _activeSegmentIndex(segments);
 
     return Column(
       children: [
@@ -692,6 +819,14 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
             ],
           ),
         ),
+        if (_player != null)
+          _PlaybackBar(
+            position: _position,
+            duration: _duration,
+            playing: _playing,
+            onTogglePlay: _togglePlay,
+            onSeek: (d) => _seekTo(d.inMilliseconds),
+          ),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
@@ -699,19 +834,19 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (final segment in segments)
-                        Semantics(
-                          label:
-                              'Transcript segment at ${_timestamp(segment.startMs)}',
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: SelectableText(
-                              '${_timestamp(segment.startMs)}  '
-                              '${segment.speaker == null ? '' : '${_speakerNames[segment.speaker] ?? segment.speaker}: '}'
-                              '${segment.text}',
-                              style: theme.textTheme.bodyMedium,
-                            ),
-                          ),
+                      for (var i = 0; i < segments.length; i++)
+                        _SegmentTile(
+                          segment: segments[i],
+                          speakerLabel: segments[i].speaker == null
+                              ? null
+                              : _speakerNames[segments[i].speaker] ??
+                                  segments[i].speaker,
+                          active: i == activeIndex,
+                          canPlay: _player != null,
+                          onTap: _player == null
+                              ? null
+                              : () => _seekTo(segments[i].startMs),
+                          onEdit: () => _editSegment(i, segments[i]),
                         ),
                     ],
                   )
@@ -724,9 +859,6 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
       ],
     );
   }
-
-  static String _timestamp(int ms) =>
-      formatDuration(Duration(milliseconds: ms));
 }
 
 class _SpeakerSegment {
@@ -741,6 +873,121 @@ class _SpeakerSegment {
   final int endMs;
   final String text;
   final String? speaker;
+}
+
+/// Play/pause plus a scrub bar. Only shown once a player was actually created — a
+/// recording missing its audio file still reads its transcript, it just cannot be
+/// scrubbed or highlighted against it.
+class _PlaybackBar extends StatelessWidget {
+  const _PlaybackBar({
+    required this.position,
+    required this.duration,
+    required this.playing,
+    required this.onTogglePlay,
+    required this.onSeek,
+  });
+
+  final Duration position;
+  final Duration duration;
+  final bool playing;
+  final VoidCallback onTogglePlay;
+  final ValueChanged<Duration> onSeek;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMs = duration.inMilliseconds;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 20, 0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: Icon(playing ? Icons.pause_circle_filled : Icons.play_circle_fill),
+            iconSize: 32,
+            tooltip: playing ? 'Pause' : 'Play',
+            onPressed: onTogglePlay,
+          ),
+          Expanded(
+            child: Slider(
+              value: totalMs == 0
+                  ? 0
+                  : position.inMilliseconds.clamp(0, totalMs).toDouble(),
+              max: totalMs == 0 ? 1 : totalMs.toDouble(),
+              onChanged: totalMs == 0
+                  ? null
+                  : (value) => onSeek(Duration(milliseconds: value.round())),
+            ),
+          ),
+          Text(
+            '${formatDuration(position)} / ${formatDuration(duration)}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One transcript line: highlighted while playback is inside it, tappable to jump
+/// playback there, and editable in place to fix a misheard word without re-running
+/// transcription.
+class _SegmentTile extends StatelessWidget {
+  const _SegmentTile({
+    required this.segment,
+    required this.speakerLabel,
+    required this.active,
+    required this.canPlay,
+    required this.onTap,
+    required this.onEdit,
+  });
+
+  final _SpeakerSegment segment;
+  final String? speakerLabel;
+  final bool active;
+  final bool canPlay;
+  final VoidCallback? onTap;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final timestamp = formatDuration(Duration(milliseconds: segment.startMs));
+
+    return Semantics(
+      label: 'Transcript segment at $timestamp',
+      child: Material(
+        color: active
+            ? theme.colorScheme.primaryContainer
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    '$timestamp  '
+                    '${speakerLabel == null ? '' : '$speakerLabel: '}'
+                    '${segment.text}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  tooltip: 'Correct this line',
+                  onPressed: onEdit,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// The pre-Phase-2 reading view: what could be reconstructed from the note's cited

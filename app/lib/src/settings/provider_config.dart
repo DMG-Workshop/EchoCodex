@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:transcript_core/transcript_core.dart';
 
+import '../gemma/on_device_gemma_engine.dart';
 import '../net/dio_transport.dart';
 import '../privacy/crash_log.dart';
 import '../recording/on_device_stt.dart';
+import '../recording/recording_controller.dart' show settingsStoreProvider;
 import '../whisper/native_whisper_engine.dart';
 import 'secure_key_store.dart';
 
@@ -61,6 +63,14 @@ enum ProviderKind {
     label: 'Gemini',
     subtitle: 'Structuring with a response schema.',
     stages: {ProviderStage.structuring},
+  ),
+  gemmaOnDevice(
+    id: 'gemma-on-device',
+    label: 'Gemma (on-device)',
+    subtitle: 'A .litertlm file you already downloaded runs on this device. No key, no network.',
+    stages: {ProviderStage.structuring},
+    needsKey: false,
+    runsOnDevice: true,
   ),
   ollama(
     id: 'ollama',
@@ -163,15 +173,19 @@ class ProviderSelection {
 class ProviderFactory {
   ProviderFactory(
     this._transport,
-    this._keys, {
+    this._keys,
+    SettingsStore settings, {
     WhisperEngine? whisperEngine,
+    GemmaEngine? gemmaEngine,
     LiveTranscriptionSource Function()? liveSource,
   })  : _whisperEngine = whisperEngine ?? NativeWhisperEngine(),
+        _gemmaEngine = gemmaEngine ?? OnDeviceGemmaEngine(settings),
         _liveSource = liveSource ?? OnDeviceSpeechSource.new;
 
   final HttpTransport _transport;
   final KeyStore _keys;
   final WhisperEngine _whisperEngine;
+  final GemmaEngine _gemmaEngine;
 
   /// Built lazily: constructing the platform recognizer touches a plugin channel, which
   /// a widget test has no binding for.
@@ -229,6 +243,8 @@ class ProviderFactory {
               : LocalFlavor.lmStudio,
           apiKey: key,
         ),
+      ProviderKind.gemmaOnDevice =>
+        GemmaStructuringProvider(engine: _gemmaEngine),
       _ => null,
     };
   }
@@ -278,9 +294,17 @@ final keyStoreProvider = Provider<KeyStore>(
   ),
 );
 
+final gemmaEngineProvider = Provider<OnDeviceGemmaEngine>(
+  (ref) => OnDeviceGemmaEngine(ref.watch(settingsStoreProvider)),
+);
+
 final providerFactoryProvider = Provider<ProviderFactory>(
   (ref) => ProviderFactory(
-      ref.watch(transportProvider), ref.watch(keyStoreProvider)),
+    ref.watch(transportProvider),
+    ref.watch(keyStoreProvider),
+    ref.watch(settingsStoreProvider),
+    gemmaEngine: ref.watch(gemmaEngineProvider),
+  ),
 );
 
 enum ReleaseChannel {
@@ -440,6 +464,38 @@ class SettingsStore {
 
   Future<void> setNotionDatabaseId(String id) =>
       _prefs.setString(_kNotionDatabaseId, id.trim());
+
+  static const _kGemmaFileName = 'gemma.modelFileName';
+  static const _kGemmaFamily = 'gemma.modelFamily';
+  static const _kGemmaContextWindow = 'gemma.contextWindowTokens';
+
+  /// The file name `flutter_gemma` tracks the installed model under, or null if none
+  /// has been picked yet.
+  String? get gemmaModelFileName => _prefs.getString(_kGemmaFileName);
+
+  /// The `GemmaFamily` name the file was installed with — needed again on every app
+  /// launch, since the chat template routing is chosen at install time, not read back
+  /// from the file.
+  String? get gemmaModelFamily => _prefs.getString(_kGemmaFamily);
+
+  int get gemmaContextWindowTokens =>
+      _prefs.getInt(_kGemmaContextWindow) ?? 2048;
+
+  Future<void> setGemmaModel({
+    required String fileName,
+    required String family,
+    required int contextWindowTokens,
+  }) async {
+    await _prefs.setString(_kGemmaFileName, fileName);
+    await _prefs.setString(_kGemmaFamily, family);
+    await _prefs.setInt(_kGemmaContextWindow, contextWindowTokens);
+  }
+
+  Future<void> clearGemmaModel() async {
+    await _prefs.remove(_kGemmaFileName);
+    await _prefs.remove(_kGemmaFamily);
+    await _prefs.remove(_kGemmaContextWindow);
+  }
 
   static const _kSavedBoardViews = 'workflow.savedBoardViews';
 

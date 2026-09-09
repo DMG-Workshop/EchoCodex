@@ -64,6 +64,11 @@ class Recordings extends Table {
   /// The template used to structure this recording, if any.
   TextColumn get templateId => text().nullable()();
 
+  /// BCP-47 override for this recording only, e.g. 'es-ES'. Null falls back to the
+  /// global transcription language setting — set here when the auto-detected or
+  /// default language turned out wrong for this particular recording.
+  TextColumn get language => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -203,10 +208,14 @@ class TranscriptDatabase extends _$TranscriptDatabase {
   TranscriptDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async {
+          await m.createAll();
+          await _seedSummaryPresets();
+        },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             await m.addColumn(recordings, recordings.transcriptText);
@@ -227,6 +236,12 @@ class TranscriptDatabase extends _$TranscriptDatabase {
           if (from < 6) {
             await m.createTable(codexNotes);
           }
+          if (from < 7) {
+            await m.addColumn(recordings, recordings.language);
+          }
+          if (from < 8) {
+            await _seedSummaryPresets();
+          }
         },
         beforeOpen: (details) async {
           // SQLite disables foreign keys by default, so the cascade from a deleted
@@ -235,6 +250,54 @@ class TranscriptDatabase extends _$TranscriptDatabase {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
+
+  /// Built-in summary presets, seeded as ordinary [NoteTemplates] rows so the existing
+  /// template picker, activation, and deletion machinery needs no changes to offer
+  /// them. Fixed ids and `insertOnConflictUpdate` make this safe to call on every
+  /// upgrade path without duplicating rows or resurrecting one the user deleted on
+  /// purpose — conflicts only occur on the id itself, and a deleted preset's id is
+  /// simply gone, not reinserted.
+  Future<void> _seedSummaryPresets() async {
+    final now = DateTime.now();
+    const presets = {
+      'preset_meeting': (
+        'Meeting',
+        'Emphasize decisions made, action items with owners, and open questions. '
+            'Note who committed to what.',
+      ),
+      'preset_lecture': (
+        'Lecture',
+        'Emphasize key concepts and structure the note by topic, with a glossary of '
+            'unfamiliar terms. Action items are rare here — do not invent any.',
+      ),
+      'preset_interview': (
+        'Interview',
+        'Preserve direct quotes verbatim where they support a point. Note follow-up '
+            'questions raised and any commitments the interviewee made.',
+      ),
+      'preset_call': (
+        'Call',
+        'Keep it brief: next steps, owners, and any dates mentioned. Favor what '
+            'changes as a result of this call over exhaustive detail.',
+      ),
+      'preset_brainstorming': (
+        'Brainstorming',
+        'Capture every idea raised, even half-formed ones, grouped by theme. Do not '
+            'assign owners or due dates unless someone explicitly volunteered.',
+      ),
+    };
+    for (final entry in presets.entries) {
+      await into(noteTemplates).insertOnConflictUpdate(
+        NoteTemplatesCompanion.insert(
+          id: entry.key,
+          name: entry.value.$1,
+          instructions: entry.value.$2,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+    }
+  }
 
   /// Recordings with chunks still outstanding, priority ones first — see the priority
   /// transcription queue workflow feature. Called at launch: this is what turns a

@@ -171,6 +171,39 @@ class RecordingRepository {
         RecordingsCompanion(speakerNamesJson: Value(jsonEncode(names))),
       );
 
+  /// Corrects the text of a single transcript segment \u2014 typically caught while
+  /// listening back to the recording. Recomputes the assembled transcript text from the
+  /// edited segments so the two never drift out of sync; the separately-cached cleaned
+  /// transcript is left untouched, since a wording fix here does not warrant re-running
+  /// the cleanup pass.
+  Future<void> updateTranscriptSegment(
+    String recordingId,
+    int index,
+    String text,
+  ) async {
+    final row = await (_db.select(_db.recordings)
+          ..where((r) => r.id.equals(recordingId)))
+        .getSingleOrNull();
+    final raw = row?.transcriptSegmentsJson;
+    if (raw == null) return;
+    final decoded = jsonDecode(raw);
+    if (decoded is! List || index < 0 || index >= decoded.length) return;
+
+    final segments = decoded
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+    segments[index]['text'] = text;
+
+    await (_db.update(_db.recordings)..where((r) => r.id.equals(recordingId)))
+        .write(RecordingsCompanion(
+      transcriptSegmentsJson: Value(jsonEncode(segments)),
+      transcriptText: Value(
+        segments.map((s) => s['text'] as String? ?? '').join(' '),
+      ),
+    ));
+  }
+
   /// Marks or unmarks a recording as urgent, so it is transcribed before the rest of the
   /// backlog on the next launch — see the priority transcription queue workflow feature.
   Future<void> setPriority(String recordingId, bool priority) =>
@@ -180,6 +213,13 @@ class RecordingRepository {
   Future<void> setLocalOnly(String recordingId, bool localOnly) =>
       (_db.update(_db.recordings)..where((r) => r.id.equals(recordingId)))
           .write(RecordingsCompanion(localOnly: Value(localOnly)));
+
+  /// Sets or clears this recording's own transcription language, overriding the global
+  /// default the next time it is (re)transcribed \u2014 e.g. after auto-detect guessed
+  /// wrong and the recording needs a retry with the correct language.
+  Future<void> setLanguage(String recordingId, String? language) =>
+      (_db.update(_db.recordings)..where((r) => r.id.equals(recordingId)))
+          .write(RecordingsCompanion(language: Value(language)));
 
   Future<List<NoteTemplate>> templates() => (_db.select(_db.noteTemplates)
         ..orderBy([(t) => OrderingTerm.asc(t.name)]))
