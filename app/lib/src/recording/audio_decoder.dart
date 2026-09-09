@@ -37,7 +37,7 @@ class AudioDecodeException implements Exception {
 /// `AVAssetReader` on iOS.
 class PlatformAudioDecoder implements AudioDecoder {
   const PlatformAudioDecoder(
-      [this._channel = const MethodChannel('kallanotes/audio_decoder')]);
+      [this._channel = const MethodChannel('com.echocodex/audio_decoder')]);
 
   final MethodChannel _channel;
 

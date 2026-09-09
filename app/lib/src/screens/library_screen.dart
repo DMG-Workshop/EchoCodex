@@ -9,6 +9,7 @@ import '../data/database.dart' as db;
 import '../data/repository.dart';
 import '../recording/recording_controller.dart';
 import '../settings/settings_screen.dart';
+import 'codex_screen.dart';
 import 'import_action.dart';
 import 'note_screen.dart';
 import 'record_screen.dart';
@@ -35,12 +36,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final recordings = ref.watch(recordingsProvider);
+    final codexNotes = ref.watch(codexNotesProvider);
     final importEnabled = ref.watch(settingsStoreProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Recordings'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.auto_stories_outlined),
+            tooltip: 'Codex',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const CodexScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.today_outlined),
             tooltip: 'Today',
@@ -75,7 +84,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not open the library.\n$e')),
         data: (items) {
-          final filtered = _filtered(items);
+          // codexNotes has its own loading state, but it is the second half of one
+          // search box, not a screen of its own — while it is still opening, search
+          // simply has nothing from the Codex yet rather than blocking on it.
+          final notes = codexNotes.valueOrNull ?? const <db.CodexNote>[];
+          final filteredRecordings = _filteredRecordings(items);
+          final filteredNotes = _filteredCodexNotes(notes);
+          final hasQuery = _query.trim().isNotEmpty;
+          final hasResults =
+              filteredRecordings.isNotEmpty || filteredNotes.isNotEmpty;
+
           return Column(
             children: [
               const _ProcessingQueuePanel(),
@@ -85,7 +103,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   controller: _searchController,
                   onChanged: (v) => setState(() => _query = v),
                   decoration: InputDecoration(
-                    hintText: 'Search notes, transcripts, and tasks',
+                    hintText: 'Search the Codex and your transcripts',
                     prefixIcon: const Icon(Icons.search),
                     isDense: true,
                     border: OutlineInputBorder(
@@ -104,18 +122,36 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
               ),
               Expanded(
-                child: filtered.isEmpty
-                    ? _query.trim().isEmpty
+                child: !hasResults
+                    ? !hasQuery
                         ? const _EmptyLibrary()
                         : Center(
                             child: Text('Nothing matches "$_query".',
                                 style: Theme.of(context).textTheme.bodyMedium),
                           )
-                    : ListView.separated(
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, i) =>
-                            _RecordingTile(recording: filtered[i]),
+                    : ListView(
+                        children: [
+                          if (hasQuery && filteredNotes.isNotEmpty) ...[
+                            _ResultsHeader(
+                              label: 'Codex',
+                              count: filteredNotes.length,
+                            ),
+                            for (final note in filteredNotes) ...[
+                              _CodexResultTile(note: note),
+                              const Divider(height: 1),
+                            ],
+                          ],
+                          if (hasQuery && filteredRecordings.isNotEmpty)
+                            _ResultsHeader(
+                              label: 'Recordings',
+                              count: filteredRecordings.length,
+                            ),
+                          for (var i = 0; i < filteredRecordings.length; i++) ...[
+                            _RecordingTile(recording: filteredRecordings[i]),
+                            if (i < filteredRecordings.length - 1)
+                              const Divider(height: 1),
+                          ],
+                        ],
                       ),
               ),
             ],
@@ -125,7 +161,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  List<db.Recording> _filtered(List<db.Recording> items) {
+  List<db.Recording> _filteredRecordings(List<db.Recording> items) {
     final needle = _query.trim().toLowerCase();
     if (needle.isEmpty) return items;
     return items.where((r) {
@@ -135,6 +171,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           _contains(r.cleanedTranscriptText, needle) ||
           _contains(noteText, needle);
     }).toList();
+  }
+
+  /// Codex notes only enter the results once there is something to search for — the
+  /// unfiltered home screen stays the recordings list it always was.
+  List<db.CodexNote> _filteredCodexNotes(List<db.CodexNote> items) {
+    final needle = _query.trim().toLowerCase();
+    if (needle.isEmpty) return const [];
+    return items.where((n) => _contains(n.body, needle)).toList();
   }
 
   static bool _contains(String? value, String needle) =>
@@ -298,6 +342,58 @@ class _ProcessingQueuePanelState extends ConsumerState<_ProcessingQueuePanel> {
       },
     );
   }
+}
+
+/// A small section label between the Codex and recordings halves of a search result
+/// list — only shown once there is a query splitting the two apart.
+class _ResultsHeader extends StatelessWidget {
+  const _ResultsHeader({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Text(
+          '$label · $count',
+          style: Theme.of(context)
+              .textTheme
+              .labelLarge
+              ?.copyWith(color: Theme.of(context).colorScheme.primary),
+        ),
+      );
+}
+
+/// A Codex note as it appears among search results — a lighter touch than
+/// [_CodexNoteTile] in the Codex screen itself, since this is a secondary result set
+/// living inside someone else's search box, not the Codex's own management view.
+class _CodexResultTile extends ConsumerWidget {
+  const _CodexResultTile({required this.note});
+
+  final db.CodexNote note;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ListTile(
+        leading: const Icon(Icons.auto_stories_outlined),
+        title: Text(note.body, maxLines: 2, overflow: TextOverflow.ellipsis),
+        subtitle: note.sourceRecordingTitle == null
+            ? null
+            : Text('From "${note.sourceRecordingTitle}"',
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+        onTap: () async {
+          final edited = await editCodexNoteDialog(
+            context,
+            initial: note.body,
+            title: 'Edit note',
+          );
+          if (edited == null || edited.trim().isEmpty) return;
+          if (edited.trim() == note.body) return;
+          await ref
+              .read(repositoryProvider)
+              .updateCodexNote(note.id, edited.trim());
+        },
+      );
 }
 
 class _EmptyLibrary extends StatelessWidget {

@@ -8,7 +8,7 @@ import Flutter
 /// system uses everywhere else — so nothing has to be bundled to read a meeting exported
 /// from Zoom or a voice memo from another app.
 final class AudioDecoderPlugin: NSObject {
-  static let channelName = "kallanotes/audio_decoder"
+  static let channelName = "com.echocodex/audio_decoder"
 
   private static let targetSampleRate = 16000.0
   private static let targetChannels: UInt32 = 1

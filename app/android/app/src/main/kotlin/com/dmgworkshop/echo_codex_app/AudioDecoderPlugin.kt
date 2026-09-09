@@ -22,7 +22,7 @@ import kotlin.concurrent.thread
 class AudioDecoderPlugin : MethodChannel.MethodCallHandler {
 
     companion object {
-        const val CHANNEL_NAME = "kallanotes/audio_decoder"
+        const val CHANNEL_NAME = "com.echocodex/audio_decoder"
 
         private const val TARGET_SAMPLE_RATE = 16000
         private const val TARGET_CHANNELS = 1
@@ -43,7 +43,7 @@ class AudioDecoderPlugin : MethodChannel.MethodCallHandler {
 
                 // Decoding an hour of audio takes long enough to drop frames on the main
                 // thread; the result is posted back on it, which is where Flutter needs it.
-                thread(name = "kallanotes-decode") {
+                thread(name = "echocodex-decode") {
                     try {
                         decodeToWav(sourcePath, targetPath)
                         postSuccess(result)

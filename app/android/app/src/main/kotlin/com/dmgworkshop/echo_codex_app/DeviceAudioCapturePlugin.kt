@@ -24,7 +24,7 @@ class DeviceAudioCapturePlugin(
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
-        const val CHANNEL_NAME = "kallanotes/device_audio"
+        const val CHANNEL_NAME = "com.echocodex/device_audio"
 
         /** Distinct enough not to collide with anything the Flutter plugins use. */
         const val CONSENT_REQUEST_CODE = 0x4B4E

@@ -293,6 +293,54 @@ class RecordingRepository {
     await (_db.delete(_db.recordings)..where((r) => r.id.equals(id))).go();
   }
 
+  // --- Codex ---------------------------------------------------------
+  //
+  // Independent of the recordings table on purpose: a Codex note outlives the
+  // transcript it may have started from. See CodexNotes in database.dart for why
+  // sourceRecordingId is a soft, nullable link rather than a hard reference.
+
+  Stream<List<CodexNote>> watchCodexNotes() => (_db.select(_db.codexNotes)
+        ..orderBy([(n) => OrderingTerm.desc(n.updatedAt)]))
+      .watch();
+
+  Future<List<CodexNote>> codexNotes() => (_db.select(_db.codexNotes)
+        ..orderBy([(n) => OrderingTerm.desc(n.updatedAt)]))
+      .get();
+
+  /// Adds a freeform note, or one copied from a transcript line — [sourceRecordingId]
+  /// and [sourceRecordingTitle] are set only in the latter case, and are provenance
+  /// only: nothing about the note's lifetime depends on that recording still existing.
+  Future<String> createCodexNote(
+    String body, {
+    String? sourceRecordingId,
+    String? sourceRecordingTitle,
+  }) async {
+    final now = DateTime.now();
+    final id = 'codex_${now.microsecondsSinceEpoch}';
+    await _db.into(_db.codexNotes).insert(
+          CodexNotesCompanion.insert(
+            id: id,
+            body: body,
+            createdAt: now,
+            updatedAt: now,
+            sourceRecordingId: Value(sourceRecordingId),
+            sourceRecordingTitle: Value(sourceRecordingTitle),
+          ),
+        );
+    return id;
+  }
+
+  Future<void> updateCodexNote(String id, String body) =>
+      (_db.update(_db.codexNotes)..where((n) => n.id.equals(id))).write(
+        CodexNotesCompanion(
+          body: Value(body),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+
+  Future<void> deleteCodexNote(String id) =>
+      (_db.delete(_db.codexNotes)..where((n) => n.id.equals(id))).go();
+
   Future<void> deleteSourceAudio(String id) async {
     final recording = await byId(id);
     final path = recording?.audioPath;

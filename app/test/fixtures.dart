@@ -131,18 +131,40 @@ db.Recording recordingRow({
       templateId: null,
     );
 
+db.CodexNote codexNoteRow({
+  String id = 'codex_1',
+  String body = 'Kella took an arrow but shook it off.',
+  String? sourceRecordingId,
+  String? sourceRecordingTitle,
+}) =>
+    db.CodexNote(
+      id: id,
+      body: body,
+      createdAt: DateTime(2026, 9, 5, 10, 30),
+      updatedAt: DateTime(2026, 9, 5, 10, 30),
+      sourceRecordingId: sourceRecordingId,
+      sourceRecordingTitle: sourceRecordingTitle,
+    );
+
 /// A [RecordingRepository] stand-in for widget tests that need real delete behaviour
 /// (an item leaving the list, a repeat delete being a no-op) without a real drift
 /// database — a live `watch()` stream left dangling timers that flutter_test's teardown
 /// invariants then tripped over.
 class FakeRecordingRepository implements RecordingRepository {
-  FakeRecordingRepository(List<db.Recording> initial)
+  FakeRecordingRepository(List<db.Recording> initial,
+      {List<db.CodexNote> codexNotes = const []})
       : _rows = List.of(initial),
-        _controller = StreamController<List<db.Recording>>.broadcast();
+        _controller = StreamController<List<db.Recording>>.broadcast(),
+        _codexNotes = List.of(codexNotes);
 
   List<db.Recording> _rows;
   final StreamController<List<db.Recording>> _controller;
   final List<String> deletedIds = [];
+
+  List<db.CodexNote> _codexNotes = [];
+  final StreamController<List<db.CodexNote>> _codexController =
+      StreamController<List<db.CodexNote>>.broadcast();
+  final List<String> deletedCodexNoteIds = [];
 
   @override
   Future<void> delete(String id) async {
@@ -180,6 +202,56 @@ class FakeRecordingRepository implements RecordingRepository {
 
   @override
   Future<List<db.Recording>> all() async => List.of(_rows);
+
+  // Same immediate-snapshot-then-live-updates shape as watchAll, so a Codex-search
+  // test behaves the same as the recordings one it sits next to.
+  @override
+  Stream<List<db.CodexNote>> watchCodexNotes() async* {
+    yield List.unmodifiable(_codexNotes);
+    yield* _codexController.stream;
+  }
+
+  @override
+  Future<List<db.CodexNote>> codexNotes() async => List.of(_codexNotes);
+
+  @override
+  Future<String> createCodexNote(
+    String body, {
+    String? sourceRecordingId,
+    String? sourceRecordingTitle,
+  }) async {
+    final now = DateTime.now();
+    final id = 'codex_${_codexNotes.length}_${now.microsecondsSinceEpoch}';
+    _codexNotes = [
+      ..._codexNotes,
+      db.CodexNote(
+        id: id,
+        body: body,
+        createdAt: now,
+        updatedAt: now,
+        sourceRecordingId: sourceRecordingId,
+        sourceRecordingTitle: sourceRecordingTitle,
+      ),
+    ];
+    _codexController.add(List.unmodifiable(_codexNotes));
+    return id;
+  }
+
+  @override
+  Future<void> updateCodexNote(String id, String body) async {
+    _codexNotes = [
+      for (final n in _codexNotes)
+        if (n.id == id) n.copyWith(body: body, updatedAt: DateTime.now()) else n,
+    ];
+    _codexController.add(List.unmodifiable(_codexNotes));
+  }
+
+  @override
+  Future<void> deleteCodexNote(String id) async {
+    deletedCodexNoteIds.add(id);
+    _codexNotes = _codexNotes.where((n) => n.id != id).toList();
+    _codexController.add(List.unmodifiable(_codexNotes));
+  }
 
   @override
   Future<db.Recording?> byId(String id) async =>

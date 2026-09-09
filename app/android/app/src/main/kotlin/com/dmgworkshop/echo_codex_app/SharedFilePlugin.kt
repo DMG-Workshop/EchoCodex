@@ -23,7 +23,7 @@ class SharedFilePlugin(
 ) : MethodChannel.MethodCallHandler {
 
     companion object {
-        const val CHANNEL_NAME = "kallanotes/shared_file"
+        const val CHANNEL_NAME = "com.echocodex/shared_file"
     }
 
     /**

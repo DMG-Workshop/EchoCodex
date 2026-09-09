@@ -8,7 +8,7 @@ import UIKit
 /// this callback, so the bytes are copied into our own cache immediately: a path kept from
 /// it would read as missing by the time the import actually runs.
 final class SharedFilePlugin: NSObject, FlutterSceneLifeCycleDelegate {
-  static let channelName = "kallanotes/shared_file"
+  static let channelName = "com.echocodex/shared_file"
 
   private var channel: FlutterMethodChannel?
 

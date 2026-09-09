@@ -194,14 +194,14 @@ class _NotStructuredYet extends StatelessWidget {
   }
 }
 
-class _NotesTab extends StatelessWidget {
+class _NotesTab extends ConsumerWidget {
   const _NotesTab({required this.note, required this.recording});
 
   final NoteDocument note;
   final db.Recording recording;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
     return ListView(
@@ -228,6 +228,22 @@ class _NotesTab extends StatelessWidget {
                   Text('·  ', style: theme.textTheme.bodyLarge),
                   Expanded(
                       child: Text(bullet, style: theme.textTheme.bodyMedium)),
+                  IconButton(
+                    icon: const Icon(Icons.bookmark_add_outlined, size: 20),
+                    tooltip: 'Save to Codex',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      await ref.read(repositoryProvider).createCodexNote(
+                            bullet,
+                            sourceRecordingId: recording.id,
+                            sourceRecordingTitle: recording.title,
+                          );
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Saved to Codex')),
+                      );
+                    },
+                  ),
                 ],
               ),
             ),

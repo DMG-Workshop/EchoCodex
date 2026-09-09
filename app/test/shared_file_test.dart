@@ -5,7 +5,7 @@ import 'package:echo_codex_app/src/recording/shared_file.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel('kallanotes/shared_file');
+  const channel = MethodChannel('com.echocodex/shared_file');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
