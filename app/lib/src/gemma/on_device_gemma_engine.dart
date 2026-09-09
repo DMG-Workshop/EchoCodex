@@ -38,6 +38,13 @@ class OnDeviceGemmaEngine implements GemmaEngine {
 
   /// Registers [path] as the active on-device model. The file is referenced in place,
   /// not copied — LiteRT-LM bundles are too large to duplicate into app storage.
+  ///
+  /// Also loads the model once to confirm it actually runs on this device before
+  /// committing to it: `install()` alone only registers the file, it doesn't try to
+  /// build an inference engine from it, so a backend-restricted or corrupt bundle
+  /// would otherwise look "installed" here and only fail the next time a recording
+  /// gets structured. Failing loudly now, with the file rolled back, means the error
+  /// shows up next to the file picker instead of after a recording.
   Future<void> install({
     required String path,
     required GemmaFamily family,
@@ -49,6 +56,15 @@ class OnDeviceGemmaEngine implements GemmaEngine {
       fileType: ModelFileType.litertlm,
     ).fromFile(path).install();
     _model = null;
+    try {
+      _model = await FlutterGemma.getActiveModel(
+        maxTokens: contextWindowTokens,
+      );
+    } catch (error) {
+      await FlutterGemma.uninstallModel(fileName);
+      await FlutterGemma.clearActiveInferenceIdentity();
+      throw _friendlierLoadError(error, fileName: fileName);
+    }
     await _settings.setGemmaModel(
       fileName: fileName,
       family: family.name,
@@ -79,10 +95,16 @@ class OnDeviceGemmaEngine implements GemmaEngine {
 
   InferenceModel? _model;
 
-  Future<InferenceModel> _activeModel() async =>
-      _model ??= await FlutterGemma.getActiveModel(
+  Future<InferenceModel> _activeModel() async {
+    if (_model != null) return _model!;
+    try {
+      return _model = await FlutterGemma.getActiveModel(
         maxTokens: _settings.gemmaContextWindowTokens,
       );
+    } catch (error) {
+      throw _friendlierLoadError(error, fileName: _settings.gemmaModelFileName);
+    }
+  }
 
   @override
   Future<String> generate({
@@ -109,4 +131,23 @@ class OnDeviceGemmaEngine implements GemmaEngine {
         ),
     };
   }
+}
+
+/// Turns `flutter_gemma_litertlm`'s native engine-load failure into something a user
+/// can act on. That package doesn't export `BackendInitException` — it's an FFI
+/// implementation detail — so this matches its `toString()` shape rather than the
+/// type; anything else passes through unchanged.
+Exception _friendlierLoadError(Object error, {String? fileName}) {
+  final detail = error.toString();
+  if (!detail.contains('BackendInitException')) {
+    return error is Exception ? error : Exception(detail);
+  }
+  final model = fileName == null ? 'This model' : '"$fileName"';
+  return Exception(
+    '$model failed to load on this device — both the GPU and CPU backends were '
+    'tried and neither could start. This usually means the download was '
+    "incomplete or corrupted, or the file is a GPU-only build this device's "
+    'driver cannot run. Re-download the .litertlm file, or try a CPU/base '
+    'variant if the source publishes one.\n\n$detail',
+  );
 }
