@@ -29,6 +29,16 @@ void main() {
     expect(doc.toJson(), equals(json));
   });
 
+  test('a game session round-trips and stays schema-valid', () {
+    final json = validNoteJson();
+    (json['meta'] as Map<String, dynamic>)['recordingType'] = 'game_session';
+
+    final doc = NoteDocument.fromJson(json);
+    expect(doc.meta.recordingType, RecordingType.gameSession);
+    expect(doc.toJson(), equals(json));
+    expect(SchemaValidator(noteDocumentSchema).validate(doc.toJson()), isEmpty);
+  });
+
   group('study aids', () {
     test('null (feature off) decodes to an empty list, never a crash', () {
       final json = validNoteJson()
