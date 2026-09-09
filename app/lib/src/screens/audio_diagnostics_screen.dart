@@ -13,7 +13,9 @@ class AudioDiagnosticsScreen extends StatefulWidget {
 class _AudioDiagnosticsScreenState extends State<AudioDiagnosticsScreen> {
   late Future<AudioDiagnostics> _diagnostics = AudioDiagnostics.load();
 
-  void _refresh() => setState(() => _diagnostics = AudioDiagnostics.load());
+  void _refresh() => setState(() {
+        _diagnostics = AudioDiagnostics.load();
+      });
 
   @override
   Widget build(BuildContext context) => Scaffold(

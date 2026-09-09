@@ -92,7 +92,9 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
                   ),
                 const SizedBox(height: 8),
                 FilledButton.tonalIcon(
-                  onPressed: () => setState(() => _health = _load()),
+                  onPressed: () => setState(() {
+                    _health = _load();
+                  }),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Run checks again'),
                 ),
