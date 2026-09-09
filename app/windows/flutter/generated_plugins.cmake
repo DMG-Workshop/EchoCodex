@@ -3,12 +3,16 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  desktop_drop
   flutter_secure_storage_windows
   record_windows
+  screen_retriever_windows
   share_plus
   speech_to_text_windows
   sqlite3_flutter_libs
+  tray_manager
   url_launcher_windows
+  window_manager
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
