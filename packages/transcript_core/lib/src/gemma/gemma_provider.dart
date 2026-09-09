@@ -73,7 +73,8 @@ class GemmaStructuringProvider extends StructuringProvider {
     if (model == null) {
       return ConnectionResult.failure(
         summary: 'No on-device model is loaded yet',
-        remedy: 'Pick a downloaded .litertlm file in settings — Gemma models are '
+        remedy:
+            'Pick a downloaded .litertlm file in settings — Gemma models are '
             'available from Hugging Face (litert-community) or Kaggle.',
       );
     }
