@@ -43,7 +43,9 @@ class _WorkflowSettingsScreenState
           TextSelection.collapsed(offset: store.transcriptionLanguage.length),
     );
     _vocabularyController.value = _vocabularyController.value.copyWith(
-      
+      text: store.customVocabulary,
+      selection: TextSelection.collapsed(offset: store.customVocabulary.length),
+    );
     _webhookController.value = _webhookController.value.copyWith(
       text: store.webhookUrl,
       selection: TextSelection.collapsed(offset: store.webhookUrl.length),
@@ -51,8 +53,6 @@ class _WorkflowSettingsScreenState
     _notionController.value = _notionController.value.copyWith(
       text: store.notionDatabaseId,
       selection: TextSelection.collapsed(offset: store.notionDatabaseId.length),
-    );text: store.customVocabulary,
-      selection: TextSelection.collapsed(offset: store.customVocabulary.length),
     );
 
     return Scaffold(
@@ -262,7 +262,7 @@ class _WorkflowSettingsScreenState
                   'from Zoom or Teams, a lecture, a voice memo.'),
           _toggle(store, 'videoImport', 'Import video',
               'Take the audio track out of MP4, M4V and MOV files.'),
-          if (!kIsWebDesktopGuard &&
+          if (!kIsWeb &&
               (Platform.isLinux || Platform.isMacOS || Platform.isWindows))
             ListTile(
               leading: const Icon(Icons.folder_open),
@@ -283,7 +283,14 @@ class _WorkflowSettingsScreenState
                       await store.setWatchFolderPath(picked);
                     }
                   }
-                  if (moun_webhookController,
+                  if (mounted) setState(() {});
+                },
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+            child: TextField(
+              controller: _webhookController,
               decoration: const InputDecoration(
                 labelText: 'Webhook URL',
                 hintText: 'https://example.com/hooks/echo-codex',
@@ -294,15 +301,7 @@ class _WorkflowSettingsScreenState
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
             child: TextField(
-              controller: _notionController
-              ),
-              onSubmitted: store.setWebhookUrl,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-            child: TextField(
-              controller: TextEditingController(text: store.notionDatabaseId),
+              controller: _notionController,
               decoration: const InputDecoration(
                 labelText: 'Notion database ID',
               ),

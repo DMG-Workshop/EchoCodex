@@ -17,7 +17,6 @@ import '../data/database.dart' as db;
 import '../export/outbound_integrations.dart';
 import '../recording/recording_controller.dart';
 import '../settings/provider_config.dart';
-import '../settings/secure_key_store.dart';
 
 String _followUpEmail(NoteDocument note) {
   final actions = note.tasks
@@ -249,6 +248,7 @@ class ExportSheet extends ConsumerWidget {
     final navigator = Navigator.of(context);
     try {
       final redact = await _askRedaction(context);
+      if (!context.mounted) return;
       final passphrase =
           format == ExportFormat.archive ? await _askPassphrase(context) : null;
       if (format == ExportFormat.archive && passphrase == null) return;
