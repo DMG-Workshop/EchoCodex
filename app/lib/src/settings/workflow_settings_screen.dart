@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../recording/recording_controller.dart';
 import 'provider_config.dart';
-import 'secure_key_store.dart';
 
 /// User controls for the recording, transcription, import, and study workflow.
 class WorkflowSettingsScreen extends ConsumerStatefulWidget {
