@@ -1,0 +1,19 @@
+[Application]
+name=com.dmgworkshop.transcript_app
+runtime=org.gnome.Platform/x86_64/50
+sdk=org.gnome.Sdk/x86_64/50
+command=echo-codex
+
+[Context]
+shared=ipc;network;
+sockets=fallback-x11;pulseaudio;wayland;
+devices=dri;
+filesystems=home;
+
+[Extension com.dmgworkshop.transcript_app.Debug]
+directory=lib/debug
+autodelete=true
+no-autodownload=true
+
+[Build]
+built-extensions=com.dmgworkshop.transcript_app.Debug;

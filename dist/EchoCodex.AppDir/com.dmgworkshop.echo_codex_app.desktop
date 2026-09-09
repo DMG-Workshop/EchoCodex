@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Echo Codex
+Comment=Private recorder and structured notes
+Exec=echo_codex_app
+Icon=com.dmgworkshop.echo_codex_app
+Terminal=false
+Type=Application
+Categories=AudioVideo;Office;Utility;
+Keywords=recording;transcription;notes;meetings;AI;
+StartupWMClass=echo_codex_app
