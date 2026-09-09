@@ -46,9 +46,36 @@ class ReminderService {
           importance: Importance.defaultImportance,
         ),
         iOS: DarwinNotificationDetails(),
+        linux: LinuxNotificationDetails(),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
       payload: id,
+    );
+  }
+
+  Future<void> scheduleRecording({
+    required String id,
+    required DateTime startsAt,
+  }) async {
+    final scheduled = tz.TZDateTime.from(startsAt, tz.local);
+    if (scheduled.isBefore(tz.TZDateTime.now(tz.local))) return;
+    await _plugin.zonedSchedule(
+      id.hashCode,
+      'Echo Codex recording',
+      'Scheduled recording starts now.',
+      scheduled,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'scheduled_recordings',
+          'Scheduled recordings',
+          channelDescription: 'Scheduled Echo Codex recordings.',
+          importance: Importance.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+        linux: LinuxNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: 'record:$id',
     );
   }
 

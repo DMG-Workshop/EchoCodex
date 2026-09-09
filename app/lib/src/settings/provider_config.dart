@@ -283,6 +283,17 @@ final providerFactoryProvider = Provider<ProviderFactory>(
       ref.watch(transportProvider), ref.watch(keyStoreProvider)),
 );
 
+enum ReleaseChannel {
+  stable('Stable', 'Conservative releases'),
+  beta('Beta', 'Early features and model updates');
+
+  const ReleaseChannel(this.label, this.description);
+  final String label;
+  final String description;
+}
+
+final settingsRevisionProvider = StateProvider<int>((ref) => 0);
+
 /// Persisted, non-secret settings.
 class SettingsStore {
   const SettingsStore(this._prefs);
@@ -297,7 +308,19 @@ class SettingsStore {
   static const _kRecordingsDir = 'recordings.dirPath';
   static const _kWorkflowPrefix = 'workflow.';
   static const _kTemplateId = 'workflow.templateId';
+  static const _kHighContrast = 'accessibility.highContrast';
+  static const _kLargeText = 'accessibility.largeText';
+  static const _kTextScale = 'accessibility.textScale';
+  static const _kReleaseChannel = 'updates.releaseChannel';
   static const _kAutoDeleteAudio = 'privacy.autoDeleteSourceAudio';
+  static const _kMaxRecordingMinutes = 'capture.maxRecordingMinutes';
+  static const _kAutoPauseSilenceSeconds = 'capture.autoPauseSilenceSeconds';
+  static const _kAutoDetectLanguage = 'transcription.autoDetectLanguage';
+  static const _kPreRecordingChecklist = 'capture.preRecordingChecklist';
+  static const _kScheduledRecording = 'capture.scheduledRecording';
+  static const _kWatchFolder = 'desktop.watchFolder';
+  static const _kWebhookUrl = 'export.webhookUrl';
+  static const _kNotionDatabaseId = 'export.notionDatabaseId';
 
   /// A folder the user picked instead of the app's own storage, or null for the
   /// default. New recordings go here; recordings already saved elsewhere are not moved.
@@ -353,10 +376,70 @@ class SettingsStore {
       ? _prefs.remove(_kTemplateId)
       : _prefs.setString(_kTemplateId, id);
 
+  bool get highContrast => _prefs.getBool(_kHighContrast) ?? false;
+  Future<void> setHighContrast(bool value) =>
+      _prefs.setBool(_kHighContrast, value);
+
+  bool get largeText => _prefs.getBool(_kLargeText) ?? false;
+  Future<void> setLargeText(bool value) => _prefs.setBool(_kLargeText, value);
+
+  double get textScale => _prefs.getDouble(_kTextScale) ?? 1.0;
+  Future<void> setTextScale(double value) =>
+      _prefs.setDouble(_kTextScale, value.clamp(0.85, 1.6));
+
+  ReleaseChannel get releaseChannel => ReleaseChannel.values.firstWhere(
+        (channel) => channel.name == _prefs.getString(_kReleaseChannel),
+        orElse: () => ReleaseChannel.stable,
+      );
+
+  Future<void> setReleaseChannel(ReleaseChannel value) =>
+      _prefs.setString(_kReleaseChannel, value.name);
+
   bool get autoDeleteSourceAudio => _prefs.getBool(_kAutoDeleteAudio) ?? false;
 
   Future<void> setAutoDeleteSourceAudio(bool enabled) =>
       _prefs.setBool(_kAutoDeleteAudio, enabled);
+
+  int get maxRecordingMinutes => _prefs.getInt(_kMaxRecordingMinutes) ?? 0;
+
+  Future<void> setMaxRecordingMinutes(int minutes) =>
+      _prefs.setInt(_kMaxRecordingMinutes, minutes.clamp(0, 480));
+
+  int get autoPauseSilenceSeconds =>
+      _prefs.getInt(_kAutoPauseSilenceSeconds) ?? 0;
+
+  Future<void> setAutoPauseSilenceSeconds(int seconds) =>
+      _prefs.setInt(_kAutoPauseSilenceSeconds, seconds.clamp(0, 300));
+
+  bool get preRecordingChecklist =>
+      _prefs.getBool(_kPreRecordingChecklist) ?? true;
+
+  Future<void> setPreRecordingChecklist(bool enabled) =>
+      _prefs.setBool(_kPreRecordingChecklist, enabled);
+
+  DateTime? get scheduledRecording => DateTime.tryParse(
+        _prefs.getString(_kScheduledRecording) ?? '',
+      );
+
+  Future<void> setScheduledRecording(DateTime? value) => value == null
+      ? _prefs.remove(_kScheduledRecording)
+      : _prefs.setString(_kScheduledRecording, value.toIso8601String());
+
+  String? get watchFolderPath => _prefs.getString(_kWatchFolder);
+
+  Future<void> setWatchFolderPath(String? path) => path == null
+      ? _prefs.remove(_kWatchFolder)
+      : _prefs.setString(_kWatchFolder, path);
+
+  String get webhookUrl => _prefs.getString(_kWebhookUrl) ?? '';
+
+  Future<void> setWebhookUrl(String url) =>
+      _prefs.setString(_kWebhookUrl, url.trim());
+
+  String get notionDatabaseId => _prefs.getString(_kNotionDatabaseId) ?? '';
+
+  Future<void> setNotionDatabaseId(String id) =>
+      _prefs.setString(_kNotionDatabaseId, id.trim());
 
   static const _kSavedBoardViews = 'workflow.savedBoardViews';
 
@@ -388,6 +471,11 @@ class SettingsStore {
 
   Future<void> setTranscriptionLanguage(String language) =>
       _prefs.setString('${_kWorkflowPrefix}language', language.trim());
+
+  bool get autoDetectLanguage => _prefs.getBool(_kAutoDetectLanguage) ?? true;
+
+  Future<void> setAutoDetectLanguage(bool enabled) =>
+      _prefs.setBool(_kAutoDetectLanguage, enabled);
 
   String get customVocabulary =>
       _prefs.getString('${_kWorkflowPrefix}vocabulary') ?? '';

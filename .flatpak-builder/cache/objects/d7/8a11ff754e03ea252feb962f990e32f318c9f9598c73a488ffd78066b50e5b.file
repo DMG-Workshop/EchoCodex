@@ -1,0 +1,5 @@
+[Runtime]
+name=com.dmgworkshop.transcript_app.Debug
+
+[ExtensionOf]
+ref=app/com.dmgworkshop.transcript_app/x86_64/master

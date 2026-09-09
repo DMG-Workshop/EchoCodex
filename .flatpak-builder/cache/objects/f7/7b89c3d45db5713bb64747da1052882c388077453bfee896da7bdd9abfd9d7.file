@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /app/lib/echo-codex/echo_codex_app "$@"

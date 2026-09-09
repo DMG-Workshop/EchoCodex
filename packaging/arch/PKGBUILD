@@ -1,11 +1,11 @@
 pkgname=echo-codex
-pkgver=0.5.2_alpha.1
+pkgver=0.6.0
 pkgrel=1
 pkgdesc='Private recordings turned into structured notes'
 arch=('x86_64')
 url='https://echocodex.xyz'
 license=('MIT')
-depends=('gtk3' 'alsa-lib' 'libglvnd')
+depends=('gtk3' 'alsa-lib' 'libglvnd' 'ffmpeg')
 makedepends=('flutter' 'cmake' 'ninja' 'git')
 source=("$pkgname::git+https://github.com/DMG-Workshop/EchoCodex.git#branch=main")
 sha256sums=('SKIP')

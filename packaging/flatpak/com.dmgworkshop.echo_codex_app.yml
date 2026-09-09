@@ -11,6 +11,8 @@ finish-args:
   - --socket=pulseaudio
   - --device=dri
   - --filesystem=home
+  - --filesystem=host-os:ro
+  - --talk-name=org.freedesktop.Notifications
 modules:
   - name: echo-codex
     buildsystem: simple

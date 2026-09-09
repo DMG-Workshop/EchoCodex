@@ -55,6 +55,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               tooltip: 'Import a recording',
               onPressed: () => importRecordingFile(context, ref),
             ),
+          if (importEnabled.workflowEnabled('audioImport') ||
+              importEnabled.workflowEnabled('videoImport'))
+            IconButton(
+              icon: const Icon(Icons.library_add_outlined),
+              tooltip: 'Import multiple recordings',
+              onPressed: () => importRecordingFiles(context, ref),
+            ),
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: 'AI providers',
@@ -68,8 +75,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Could not open the library.\n$e')),
         data: (items) {
-          if (items.isEmpty) return const _EmptyLibrary();
-
           final filtered = _filtered(items);
           return Column(
             children: [
@@ -100,10 +105,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ),
               Expanded(
                 child: filtered.isEmpty
-                    ? Center(
-                        child: Text('Nothing matches "$_query".',
-                            style: Theme.of(context).textTheme.bodyMedium),
-                      )
+                    ? _query.trim().isEmpty
+                        ? const _EmptyLibrary()
+                        : Center(
+                            child: Text('Nothing matches "$_query".',
+                                style: Theme.of(context).textTheme.bodyMedium),
+                          )
                     : ListView.separated(
                         itemCount: filtered.length,
                         separatorBuilder: (_, __) => const Divider(height: 1),
@@ -334,9 +341,6 @@ class _RecordingTile extends ConsumerWidget {
     final theme = Theme.of(context);
     final structured = recording.noteJson != null;
     final duration = Duration(milliseconds: recording.durationMs);
-    final priorityQueueEnabled =
-        ref.watch(settingsStoreProvider).workflowEnabled('priorityQueue');
-
     return Dismissible(
       key: ValueKey(recording.id),
       direction: DismissDirection.endToStart,
@@ -397,7 +401,7 @@ class _RecordingTile extends ConsumerWidget {
               ? theme.colorScheme.primary
               : theme.colorScheme.onSurfaceVariant,
         ),
-        trailing: !structured && priorityQueueEnabled
+        trailing: !structured
             ? IconButton(
                 icon: Icon(
                   recording.priority ? Icons.bolt : Icons.bolt_outlined,

@@ -1,7 +1,7 @@
 name: echo_codex_app
 description: Echo Codex — record, transcribe with your own AI, and structure into notes.
 publish_to: none
-version: 0.5.2-alpha.1+1
+version: 0.6.0+1
 
 environment:
   sdk: ^3.5.0
@@ -66,6 +66,10 @@ dependencies:
   # plugin this project already depends on, and builds cleanly. (10.3.11 exists but is
   # retracted on pub.dev, so this pins to 10.3.10, the last non-retracted release.)
   file_picker: ^10.3.10
+  desktop_drop: ^0.8.4
+  watcher: ^1.2.1
+  tray_manager: ^0.5.3
+  window_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
