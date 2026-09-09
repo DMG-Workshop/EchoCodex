@@ -5,7 +5,7 @@ import 'package:echo_codex_app/src/recording/device_audio_capture.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const channel = MethodChannel('kallanotes/device_audio');
+  const channel = MethodChannel('com.echocodex/device_audio');
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 

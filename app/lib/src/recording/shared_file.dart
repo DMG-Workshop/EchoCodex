@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 /// second case and [files] the first, and both hand back a path in the app's own cache
 /// rather than a URI whose read permission expires.
 class SharedFiles {
-  SharedFiles([this._channel = const MethodChannel('kallanotes/shared_file')]) {
+  SharedFiles([this._channel = const MethodChannel('com.echocodex/shared_file')]) {
     _channel.setMethodCallHandler((call) async {
       if (call.method == 'onSharedFile' && call.arguments is String) {
         _controller.add(call.arguments as String);

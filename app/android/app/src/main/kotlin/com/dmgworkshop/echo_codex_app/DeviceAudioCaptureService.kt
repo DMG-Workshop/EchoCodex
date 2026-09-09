@@ -46,7 +46,7 @@ class DeviceAudioCaptureService : Service() {
         const val EXTRA_TARGET_PATH = "targetPath"
 
         private const val NOTIFICATION_ID = 0x4B4E01
-        private const val CHANNEL_ID = "kallanotes_device_audio"
+        private const val CHANNEL_ID = "echocodex_device_audio"
 
         const val SAMPLE_RATE = 16000
 
@@ -160,7 +160,7 @@ class DeviceAudioCaptureService : Service() {
         stopping = false
         record.startRecording()
 
-        capture = thread(name = "kallanotes-device-audio") {
+        capture = thread(name = "echocodex-device-audio") {
             writeWav(record, File(targetPath), minBuffer)
         }
     }

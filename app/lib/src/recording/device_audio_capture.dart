@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 /// equivalent API at all.
 class DeviceAudioCapture {
   const DeviceAudioCapture(
-      [this._channel = const MethodChannel('kallanotes/device_audio')]);
+      [this._channel = const MethodChannel('com.echocodex/device_audio')]);
 
   final MethodChannel _channel;
 
