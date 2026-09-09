@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -15,9 +16,9 @@ import 'provider_config.dart';
 import 'secure_key_store.dart';
 import 'template_manager_screen.dart';
 import 'workflow_settings_screen.dart';
-import '../screens/health_screen.dart';
-import '../screens/weekly_review_screen.dart';
 import '../screens/backup_screen.dart';
+import '../screens/audio_diagnostics_screen.dart';
+import 'accessibility_screen.dart';
 
 /// Where the two provider slots are chosen and proven.
 ///
@@ -133,25 +134,26 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               _onChanged();
             },
           ),
+          if (Platform.isLinux)
+            ListTile(
+              leading: const Icon(Icons.mic_none),
+              title: const Text('Linux audio diagnostics'),
+              subtitle: const Text('Inspect PipeWire and input devices'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                    builder: (_) => const AudioDiagnosticsScreen()),
+              ),
+            ),
           ListTile(
-            leading: const Icon(Icons.fact_check_outlined),
-            title: const Text('Weekly review'),
+            leading: const Icon(Icons.accessibility_new),
+            title: const Text('Accessibility and updates'),
             subtitle: const Text(
-                'Review unfinished commitments from the last 7 days'),
+                'Contrast, text size, release channel, and benchmarks'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(
-                  builder: (_) => const WeeklyReviewScreen()),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.health_and_safety_outlined),
-            title: const Text('Storage and provider health'),
-            subtitle:
-                const Text('Check local storage and configured AI services'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const HealthScreen()),
+                  builder: (_) => const AccessibilityScreen()),
             ),
           ),
           ListTile(

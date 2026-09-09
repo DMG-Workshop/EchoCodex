@@ -112,6 +112,8 @@ class RecordingController extends StateNotifier<RecordState> {
   Timer? _ticker;
   String _liveText = '';
   bool _paused = false;
+  bool _autoStopTriggered = false;
+  int? _quietSinceMs;
   bool _localOnly = false;
 
   bool get localOnly => _localOnly;
@@ -197,7 +199,10 @@ class RecordingController extends StateNotifier<RecordState> {
       return;
     }
 
-    final providers = await _resolveProviders(null, localOnly: _localOnly);
+    final providers = await _resolveProviders(
+      null,
+      localOnly: _localOnly,
+    );
     if (providers == null) return; // state already set to an error
 
     final recordingId = await _repository.createRecording(
@@ -247,6 +252,8 @@ class RecordingController extends StateNotifier<RecordState> {
     _storageWarning = _recorder.takeFallbackWarning();
     _liveText = '';
     _paused = false;
+    _autoStopTriggered = false;
+    _quietSinceMs = null;
     _windows.clear();
     _interruptionSub = _background.interruptions.listen(_onInterruption);
 
@@ -274,6 +281,37 @@ class RecordingController extends StateNotifier<RecordState> {
     }
 
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
+      final autoPauseSeconds = _settings.autoPauseSilenceSeconds;
+      if (autoPauseSeconds > 0 && !_paused) {
+        final nowMs = _recorder.elapsed.inMilliseconds;
+        final quiet =
+            _recorder.waveform.isNotEmpty && _recorder.waveform.last < 0.12;
+        if (quiet) {
+          _quietSinceMs ??= nowMs;
+          if (nowMs - _quietSinceMs! >= autoPauseSeconds * 1000) {
+            _paused = true;
+            unawaited(_recorder.pause());
+          }
+        } else {
+          _quietSinceMs = null;
+        }
+      } else if (_paused && _settings.autoPauseSilenceSeconds > 0) {
+        final loud =
+            _recorder.waveform.isNotEmpty && _recorder.waveform.last >= 0.12;
+        if (loud) {
+          _paused = false;
+          _quietSinceMs = null;
+          unawaited(_recorder.resume());
+        }
+      }
+      if (!_autoStopTriggered &&
+          _settings.maxRecordingMinutes > 0 &&
+          _recorder.elapsed >=
+              Duration(minutes: _settings.maxRecordingMinutes)) {
+        _autoStopTriggered = true;
+        unawaited(stopAndProcess());
+        return;
+      }
       if (state is RecordActive || state is RecordIdle) {
         final open = _windows.where((w) => w.isOpen).firstOrNull;
         state = RecordActive(
@@ -361,7 +399,10 @@ class RecordingController extends StateNotifier<RecordState> {
 
     state = const RecordProcessing(label: 'Preparing');
 
-    final providers = await _resolveProviders(live, localOnly: _localOnly);
+    final providers = await _resolveProviders(
+      live,
+      localOnly: _localOnly,
+    );
     if (providers == null) return; // state already set to an error
 
     final recordingId = await _repository.createRecording(
@@ -446,7 +487,10 @@ class RecordingController extends StateNotifier<RecordState> {
 
     state = const RecordProcessing(label: 'Importing');
 
-    final providers = await _resolveProviders(null, localOnly: _localOnly);
+    final providers = await _resolveProviders(
+      null,
+      localOnly: _localOnly,
+    );
     if (providers == null) return; // state already set to an error
 
     final ImportedAudio imported;
@@ -563,7 +607,8 @@ class RecordingController extends StateNotifier<RecordState> {
     return template?.instructions;
   }
 
-  String? get _languageHint => _settings.workflowEnabled('multiLanguage')
+  String? get _languageHint => _settings.workflowEnabled('multiLanguage') &&
+          !_settings.autoDetectLanguage
       ? _settings.transcriptionLanguage
       : null;
 

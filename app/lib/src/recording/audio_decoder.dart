@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
+
+import 'ffmpeg_locator.dart';
 
 /// Turns a compressed audio or video file into the WAV the pipeline expects.
 ///
@@ -42,22 +46,64 @@ class PlatformAudioDecoder implements AudioDecoder {
     required String sourcePath,
     required String targetPath,
   }) async {
+    if (_canUseFfmpeg) {
+      await _decodeWithFfmpeg(sourcePath: sourcePath, targetPath: targetPath);
+      return;
+    }
+
     try {
       await _channel.invokeMethod<void>('decodeToWav', {
         'sourcePath': sourcePath,
         'targetPath': targetPath,
       });
     } on MissingPluginException {
-      // A desktop or web build, where this channel has no implementation. Say which
-      // formats still work rather than failing with a plugin error the user cannot act on.
-      throw const AudioDecodeException(
-        'This platform cannot open compressed audio.',
-        'Convert the file to WAV and import that instead.',
-      );
+      await _decodeWithFfmpeg(sourcePath: sourcePath, targetPath: targetPath);
+      return;
     } on PlatformException catch (e) {
       throw AudioDecodeException(
         'The file could not be decoded.',
         e.message ?? 'It may be corrupt, or use a codec this device lacks.',
+      );
+    }
+  }
+
+  bool get _canUseFfmpeg =>
+      Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+
+  Future<void> _decodeWithFfmpeg({
+    required String sourcePath,
+    required String targetPath,
+  }) async {
+    final binary = const FfmpegLocator().locate();
+    try {
+      final result = await Process.run(binary, [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-y',
+        '-i',
+        sourcePath,
+        '-vn',
+        '-ac',
+        '1',
+        '-ar',
+        '16000',
+        '-c:a',
+        'pcm_s16le',
+        targetPath,
+      ]);
+      if (result.exitCode != 0) {
+        throw AudioDecodeException(
+          'The file could not be decoded.',
+          (result.stderr as String).trim().isEmpty
+              ? 'It may be corrupt, or contain no audio track.'
+              : (result.stderr as String).trim(),
+        );
+      }
+    } on ProcessException {
+      throw const AudioDecodeException(
+        'This computer does not have FFmpeg installed.',
+        'Install FFmpeg, then try importing the file again.',
       );
     }
   }

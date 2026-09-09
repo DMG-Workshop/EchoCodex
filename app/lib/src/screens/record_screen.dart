@@ -1,15 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import 'package:transcript_core/transcript_core.dart';
 
+import '../recording/folder_watch.dart';
 import '../recording/recording_controller.dart';
 import '../settings/settings_screen.dart';
 import '../widgets/waveform.dart';
 import 'library_screen.dart';
 import 'note_screen.dart';
+import 'weekly_review_screen.dart';
 
 /// Record, then watch it become notes.
 class RecordScreen extends ConsumerStatefulWidget {
@@ -22,6 +27,8 @@ class RecordScreen extends ConsumerStatefulWidget {
 class _RecordScreenState extends ConsumerState<RecordScreen> {
   final List<double> _levels = [];
   StreamSubscription<String>? _sharedFiles;
+  FolderWatchService? _watch;
+  bool _dropping = false;
 
   @override
   void initState() {
@@ -77,11 +84,20 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
         if (_levels.length > 2000) _levels.removeRange(0, 500);
       });
     });
+
+    if (!kIsWeb && (Platform.isLinux || Platform.isMacOS || Platform.isWindows)) {
+      _watch = FolderWatchService(
+        onFile: (path) =>
+            ref.read(recordingControllerProvider.notifier).importRecording(path),
+      );
+      unawaited(_watch!.start(ref.read(settingsStoreProvider).watchFolderPath));
+    }
   }
 
   @override
   void dispose() {
     unawaited(_sharedFiles?.cancel());
+    unawaited(_watch?.stop());
     super.dispose();
   }
 
@@ -93,6 +109,63 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
     );
     ref.invalidate(structuringReadyProvider);
+  }
+
+  Future<bool> _confirmCloudRecording(BuildContext context) async {
+    final settings = ref.read(settingsStoreProvider);
+    if (settings.posture.posture != DataPosture.cloud) {
+      return true;
+    }
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Before this recording starts'),
+            content: Text(
+              '${settings.posture.summary}.\n\n${settings.posture.detail}\n\n'
+              'Continue with this provider configuration?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Continue'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<bool> _preRecordingChecklist(BuildContext context) async {
+    final settings = ref.read(settingsStoreProvider);
+    if (!settings.preRecordingChecklist) return true;
+    final hasPermission = await ref.read(recorderProvider).hasPermission();
+    if (!context.mounted) return false;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ready to record?'),
+        content: Text(
+          'Microphone: ${hasPermission ? 'available' : 'permission needed'}\n'
+          'Storage: ${settings.recordingsDirPath ?? 'device storage'}\n'
+          'Privacy: ${settings.posture.summary}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, hasPermission),
+            child: const Text('Start recording'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   @override
@@ -134,7 +207,17 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
+        child: DropTarget(
+          onDragEntered: (_) => setState(() => _dropping = true),
+          onDragExited: (_) => setState(() => _dropping = false),
+          onDragDone: (details) async {
+            setState(() => _dropping = false);
+            final controller = ref.read(recordingControllerProvider.notifier);
+            for (final file in details.files) {
+              await controller.importRecording(file.path);
+            }
+          },
+          child: Scaffold(
           appBar: AppBar(
             title: const Text('Echo Codex'),
             actions: [
@@ -154,6 +237,14 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                 tooltip: 'AI providers',
                 onPressed: () => _openSettings(context, ref),
               ),
+              IconButton(
+                icon: const Icon(Icons.fact_check_outlined),
+                tooltip: 'Weekly review',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                      builder: (_) => const WeeklyReviewScreen()),
+                ),
+              ),
             ],
           ),
           body: SafeArea(
@@ -167,21 +258,14 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                       state is RecordError)
                     _ConfigureAiBanner(
                         onTap: () => _openSettings(context, ref)),
-                  if (state is RecordIdle)
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Local only'),
-                      subtitle:
-                          const Text('Use only on-device or local-network AI.'),
-                      value: ref
-                          .read(recordingControllerProvider.notifier)
-                          .localOnly,
-                      onChanged: (value) {
-                        ref
-                            .read(recordingControllerProvider.notifier)
-                            .setLocalOnly(value);
-                        setState(() {});
-                      },
+                  if (_dropping)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'Drop audio or video to import',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
                     ),
                   Expanded(child: RecordBody(state: state, levels: _levels)),
                 ],
@@ -220,15 +304,21 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                 children: [
                   const DeviceAudioButton(),
                   FloatingActionButton.large(
-                    onPressed: () => ref
-                        .read(recordingControllerProvider.notifier)
-                        .startRecording(),
+                    onPressed: () async {
+                      if (!await _preRecordingChecklist(context)) return;
+                      if (!await _confirmCloudRecording(context)) return;
+                      if (!context.mounted) return;
+                      await ref
+                          .read(recordingControllerProvider.notifier)
+                          .startRecording();
+                    },
                     tooltip: 'Start recording',
                     child: const Icon(Icons.mic),
                   ),
                 ],
               ),
           },
+        ),
         ),
       ),
     );
@@ -256,8 +346,32 @@ class DeviceAudioButton extends ConsumerWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: FloatingActionButton.small(
         heroTag: 'device-audio',
-        onPressed: () =>
-            ref.read(recordingControllerProvider.notifier).startDeviceCapture(),
+        onPressed: () async {
+          final settings = ref.read(settingsStoreProvider);
+          if (settings.posture.posture == DataPosture.cloud) {
+            final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('Before capture starts'),
+                    content: Text(
+                        '${settings.posture.summary}.\n\n${settings.posture.detail}'),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel')),
+                      FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Continue')),
+                    ],
+                  ),
+                ) ??
+                false;
+            if (!confirmed || !context.mounted) return;
+          }
+          await ref
+              .read(recordingControllerProvider.notifier)
+              .startDeviceCapture();
+        },
         tooltip: 'Record what this device is playing',
         child: const Icon(Icons.speaker),
       ),

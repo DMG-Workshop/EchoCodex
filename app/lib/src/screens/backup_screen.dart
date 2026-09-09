@@ -9,8 +9,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../recording/recording_controller.dart';
 
@@ -86,13 +84,24 @@ class BackupScreen extends ConsumerWidget {
       ...iv.bytes,
       ...cipher.bytes
     ];
-    final dir = await getTemporaryDirectory();
-    final file = File(p.join(dir.path, 'echo-codex-backup.zip.enc'));
+    final destination = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save encrypted Echo Codex backup',
+      fileName: 'echo-codex-backup.zip.enc',
+      type: FileType.custom,
+      allowedExtensions: ['enc'],
+    );
+    if (destination == null) return;
+    final file = File(destination);
     await file.writeAsBytes(bytes);
-    await SharePlus.instance.share(ShareParams(
-      files: [XFile(file.path, mimeType: 'application/octet-stream')],
-      subject: 'Echo Codex encrypted backup',
-    ));
+    await ref.read(repositoryProvider).recordPrivacyAudit(
+          'backup_created',
+          file.path,
+        );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Encrypted backup saved to ${file.path}')),
+      );
+    }
   }
 
   Future<void> _restore(BuildContext context, WidgetRef ref) async {

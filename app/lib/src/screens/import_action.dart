@@ -30,3 +30,24 @@ Future<void> importRecordingFile(BuildContext context, WidgetRef ref) async {
   navigator.popUntil((route) => route.isFirst);
   unawaited(controller.importRecording(path));
 }
+
+/// Imports several files in order. The durable processing queue remains the source of
+/// truth for progress after each file is handed to the controller.
+Future<void> importRecordingFiles(BuildContext context, WidgetRef ref) async {
+  final controller = ref.read(recordingControllerProvider.notifier);
+  final navigator = Navigator.of(context);
+  final picked = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ImportFormat.pickerExtensions,
+    allowMultiple: true,
+    withData: false,
+  );
+  final paths = [
+    for (final file in picked?.files ?? const <PlatformFile>[]) file.path,
+  ].whereType<String>().toList();
+  if (paths.isEmpty) return;
+  navigator.popUntil((route) => route.isFirst);
+  for (final path in paths) {
+    await controller.importRecording(path);
+  }
+}

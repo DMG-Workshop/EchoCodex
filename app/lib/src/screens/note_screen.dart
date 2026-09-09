@@ -125,16 +125,41 @@ class _NoteView extends ConsumerWidget {
         ),
         body: note == null
             ? const _NotStructuredYet()
-            : TabBarView(children: [
-                _NotesTab(note: note, recording: recording),
-                TimelineView(recordingId: recording.id, note: note),
-                CalendarView(recordingId: recording.id, note: note),
-                _StudyTab(note: note),
-                _TranscriptTab(note: note, recording: recording),
-              ]),
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  if (constraints.maxWidth >= 900) {
+                    return _TabletOverview(note: note, recording: recording);
+                  }
+                  return TabBarView(children: [
+                    _NotesTab(note: note, recording: recording),
+                    TimelineView(recordingId: recording.id, note: note),
+                    CalendarView(recordingId: recording.id, note: note),
+                    _StudyTab(note: note),
+                    _TranscriptTab(note: note, recording: recording),
+                  ]);
+                },
+              ),
       ),
     );
   }
+}
+
+class _TabletOverview extends StatelessWidget {
+  const _TabletOverview({required this.note, required this.recording});
+
+  final NoteDocument note;
+  final db.Recording recording;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          Expanded(child: _NotesTab(note: note, recording: recording)),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: TimelineView(recordingId: recording.id, note: note),
+          ),
+        ],
+      );
 }
 
 class _NotStructuredYet extends StatelessWidget {
@@ -229,8 +254,65 @@ class _NotesTab extends StatelessWidget {
             ),
         ],
         const SizedBox(height: 32),
+        _PrivacyReport(recording: recording),
         _Provenance(recording: recording),
       ],
+    );
+  }
+}
+
+class _PrivacyReport extends StatelessWidget {
+  const _PrivacyReport({required this.recording});
+
+  final db.Recording recording;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final audio =
+        recording.audioPath == null ? 'Not stored' : 'Stored on this device';
+    final transcript =
+        recording.transcriptText == null ? 'Not available' : 'Stored locally';
+    final note =
+        recording.noteJson == null ? 'Not generated' : 'Stored locally';
+    final posture = recording.localOnly
+        ? 'Local-only recording'
+        : 'Provider configuration at recording time';
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: ExpansionTile(
+        leading: const Icon(Icons.privacy_tip_outlined),
+        title: const Text('Privacy report'),
+        subtitle: Text(posture),
+        children: [
+          ListTile(
+            dense: true,
+            title: const Text('Audio'),
+            subtitle: Text(audio),
+          ),
+          ListTile(
+            dense: true,
+            title: const Text('Transcript'),
+            subtitle: Text(transcript),
+          ),
+          ListTile(
+            dense: true,
+            title: const Text('Structured note'),
+            subtitle: Text(note),
+          ),
+          ListTile(
+            dense: true,
+            title: const Text('Transcription provider'),
+            subtitle: Text(recording.transcriptionProviderId ?? 'Unknown'),
+          ),
+          ListTile(
+            dense: true,
+            title: const Text('Note provider'),
+            subtitle: Text(recording.structuringProviderId ?? 'Unknown'),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -602,13 +684,17 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       for (final segment in segments)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 14),
-                          child: SelectableText(
-                            '${_timestamp(segment.startMs)}  '
-                            '${segment.speaker == null ? '' : '${_speakerNames[segment.speaker] ?? segment.speaker}: '}'
-                            '${segment.text}',
-                            style: theme.textTheme.bodyMedium,
+                        Semantics(
+                          label:
+                              'Transcript segment at ${_timestamp(segment.startMs)}',
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: SelectableText(
+                              '${_timestamp(segment.startMs)}  '
+                              '${segment.speaker == null ? '' : '${_speakerNames[segment.speaker] ?? segment.speaker}: '}'
+                              '${segment.text}',
+                              style: theme.textTheme.bodyMedium,
+                            ),
                           ),
                         ),
                     ],

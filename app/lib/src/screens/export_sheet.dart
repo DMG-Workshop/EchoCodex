@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:encrypt/encrypt.dart' as encryption;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -13,6 +14,42 @@ import 'package:share_plus/share_plus.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 import '../data/database.dart' as db;
+import '../export/outbound_integrations.dart';
+import '../recording/recording_controller.dart';
+import '../settings/provider_config.dart';
+import '../settings/secure_key_store.dart';
+
+String _followUpEmail(NoteDocument note) {
+  final actions = note.tasks
+      .map((task) =>
+          '- ${task.title}${task.dueDate == null ? '' : ' (due ${task.dueDate})'}')
+      .join('\n');
+  final decisions =
+      note.decisions.map((decision) => '- ${decision.statement}').join('\n');
+  return 'Subject: Follow-up — ${note.meta.title}\n\n'
+      'Hi all,\n\n${note.meta.summary}\n\n'
+      'Decisions\n$decisions\n\nAction items\n$actions\n\n'
+      'Sent from Echo Codex.';
+}
+
+String _actionDigest(NoteDocument note) {
+  final tasks = note.tasks
+      .where((task) => task.status != TaskStatus.done)
+      .map((task) =>
+          '- ${task.title}${task.dueDate == null ? '' : ' — due ${task.dueDate}'}')
+      .join('\n');
+  return '# ${note.meta.title}\n\n${note.meta.summary}\n\n'
+      '## Open action items\n$tasks\n\n'
+      'Source: Echo Codex';
+}
+
+String _obsidianMarkdown(NoteDocument note, {String? recordedOn}) {
+  final slug =
+      note.meta.title.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+  return '---\ntitle: ${note.meta.title}\nrecorded: ${recordedOn ?? ''}\ntags:\n  - echo-codex\n---\n\n'
+      '${NoteExporters.markdown(note, recordedOn: recordedOn)}\n\n'
+      '---\nsource: echo-codex\nslug: $slug\n';
+}
 
 /// What a note can be turned into on its way out of the app.
 enum ExportFormat {
@@ -31,6 +68,24 @@ enum ExportFormat {
   markdown(
     label: 'Markdown',
     detail: 'Notes, decisions and action items, for pasting into a doc.',
+    extension: 'md',
+    mime: 'text/markdown',
+  ),
+  followUpEmail(
+    label: 'Follow-up email',
+    detail: 'Decisions and action items formatted for a meeting follow-up.',
+    extension: 'txt',
+    mime: 'text/plain',
+  ),
+  actionDigest(
+    label: 'Action-item digest',
+    detail: 'A concise shareable list for people who missed the meeting.',
+    extension: 'txt',
+    mime: 'text/plain',
+  ),
+  obsidian(
+    label: 'Obsidian Markdown',
+    detail: 'Markdown with frontmatter for an Obsidian vault.',
     extension: 'md',
     mime: 'text/markdown',
   ),
@@ -88,6 +143,10 @@ enum ExportFormat {
           const JsonEncoder.withIndent('  ').convert(note.toJson()),
         ExportFormat.markdown =>
           NoteExporters.markdown(note, recordedOn: recordedOn),
+        ExportFormat.obsidian =>
+          _obsidianMarkdown(note, recordedOn: recordedOn),
+        ExportFormat.followUpEmail => _followUpEmail(note),
+        ExportFormat.actionDigest => _actionDigest(note),
         ExportFormat.pdf ||
         ExportFormat.docx =>
           NoteExporters.markdown(note, recordedOn: recordedOn),
@@ -113,7 +172,7 @@ Future<void> openExportSheet(
     );
 
 /// Offers the note in each format, with a plain description of what each one keeps.
-class ExportSheet extends StatelessWidget {
+class ExportSheet extends ConsumerWidget {
   const ExportSheet(
       {super.key, required this.note, this.recording, this.recordedOn});
 
@@ -122,48 +181,65 @@ class ExportSheet extends StatelessWidget {
   final String? recordedOn;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final settings = ref.watch(settingsStoreProvider);
     final inferred =
         note.tasks.where((t) => t.dateBasis == DateBasis.inferred).length;
 
     return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
-            child: Text('Export', style: theme.textTheme.titleMedium),
-          ),
-          if (inferred > 0)
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 6),
+              child: Text('Export', style: theme.textTheme.titleMedium),
+            ),
+            if (inferred > 0)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                child: Text(
+                  '$inferred date${inferred == 1 ? ' was' : 's were'} inferred from the '
+                  'recording rather than stated. Every export says so.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.tertiary),
+                ),
+              ),
+            for (final format in ExportFormat.values)
+              ListTile(
+                title: Text(format.label),
+                subtitle: Text(format.detail),
+                trailing: const Icon(Icons.ios_share),
+                onTap: () => _share(context, format),
+                onLongPress: () => _copy(context, format),
+              ),
+            if (settings.webhookUrl.isNotEmpty)
+              ListTile(
+                title: const Text('Webhook'),
+                subtitle: const Text('POST this note to the URL in Settings.'),
+                trailing: const Icon(Icons.send_outlined),
+                onTap: () => _sendWebhook(context, ref),
+              ),
+            ListTile(
+              title: const Text('Notion database'),
+              subtitle: const Text(
+                  'Create a page in the Notion database configured in Settings.'),
+              trailing: const Icon(Icons.cloud_upload_outlined),
+              onTap: () => _sendNotion(context, ref),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
               child: Text(
-                '$inferred date${inferred == 1 ? ' was' : 's were'} inferred from the '
-                'recording rather than stated. Every export says so.',
+                'Long-press to copy instead of sharing.',
                 style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.tertiary),
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
             ),
-          for (final format in ExportFormat.values)
-            ListTile(
-              title: Text(format.label),
-              subtitle: Text(format.detail),
-              trailing: const Icon(Icons.ios_share),
-              onTap: () => _share(context, format),
-              onLongPress: () => _copy(context, format),
-            ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            child: Text(
-              'Long-press to copy instead of sharing.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -192,6 +268,43 @@ class ExportSheet extends StatelessWidget {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not share the ${format.label} export.')),
       );
+    }
+  }
+
+  Future<void> _sendWebhook(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await const OutboundIntegrations().postWebhook(
+        url: ref.read(settingsStoreProvider).webhookUrl,
+        note: note,
+      );
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Note posted to the webhook.')),
+      );
+    } on OutboundIntegrationException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message)));
+    }
+  }
+
+  Future<void> _sendNotion(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final settings = ref.read(settingsStoreProvider);
+    final token = await ref.read(keyStoreProvider).read('notion');
+    try {
+      await const OutboundIntegrations().postNotionPage(
+        token: token ?? '',
+        databaseId: settings.notionDatabaseId,
+        note: note,
+      );
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Note posted to Notion.')),
+      );
+    } on OutboundIntegrationException catch (error) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(error.remedy == null
+            ? error.message
+            : '${error.message} ${error.remedy}'),
+      ));
     }
   }
 

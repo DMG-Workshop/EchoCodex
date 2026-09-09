@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
+import 'src/desktop/desktop_shell.dart';
 import 'src/onboarding/onboarding_screen.dart';
 import 'src/privacy/crash_log.dart';
 import 'src/recording/recording_controller.dart';
@@ -22,6 +24,9 @@ Future<void> main() async {
   final prefs = await SharedPreferences.getInstance();
   final reminders = ReminderService();
   await reminders.initialize();
+  if (DesktopShell.isSupported) {
+    await windowManager.ensureInitialized();
+  }
 
   runApp(
     ProviderScope(
@@ -54,18 +59,42 @@ class _EchoCodexAppState extends ConsumerState<EchoCodexApp> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = ref.watch(settingsStoreProvider);
+    ref.watch(settingsRevisionProvider);
+    final lightTheme = ThemeData(
+      colorSchemeSeed: EchoCodexApp._seed,
+      brightness: Brightness.light,
+      useMaterial3: true,
+    );
+    final darkTheme = ThemeData(
+      colorSchemeSeed: EchoCodexApp._seed,
+      brightness: Brightness.dThemeData(
+      colorScheme: ColorScheme.highContrastLight(primary: Colors.black),
+      brightness: Brightness.light,
+      useMaterial3: true,
+    );
+    final highContrastDark = ThemeData(
+      colorScheme: ColorScheme.highContrastDark(primary: Colors.white),
+      brightness: Brightness.dark,
+      useMaterial3: true,
+    );
     return MaterialApp(
       title: 'Echo Codex',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorSchemeSeed: EchoCodexApp._seed,
-        brightness: Brightness.light,
-        useMaterial3: true,
-      ),
-      darkTheme: ThemeData(
-        colorSchemeSeed: EchoCodexApp._seed,
-        brightness: Brightness.dark,
-        useMaterial3: true,
+      theme: settings.highContrast ? highContrastLight : lightTheme,
+      darkTheme: settings.highContrast ? highContrastDark : darkTheme,
+      builder: (context, child) => DesktopShell(
+        child: MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(settings.textScale),
+            highContrast: settings.highContrast,
+            boldText: settings.highContrast,
+          ),
+          child: child!,
+        )ery.of(context).copyWith(
+          textScaler: TextScaler.linear(settings.textScale),
+        ),
+        child: child!,
       ),
       home: _needsOnboarding
           ? OnboardingScreen(onDone: _finishOnboarding)
