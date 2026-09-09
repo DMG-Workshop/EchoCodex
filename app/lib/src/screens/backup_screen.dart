@@ -108,6 +108,7 @@ class BackupScreen extends ConsumerWidget {
     final picked = await FilePicker.platform.pickFiles(withData: true);
     final path = picked?.files.single.path;
     if (path == null) return;
+    if (!context.mounted) return;
     final passphrase =
         await _passphrase(context, title: 'Decrypt device backup');
     if (passphrase == null) return;

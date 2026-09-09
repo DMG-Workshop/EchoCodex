@@ -62,8 +62,9 @@ class _HealthScreenState extends ConsumerState<HealthScreen> {
         body: FutureBuilder<_HealthSnapshot>(
           future: _health,
           builder: (context, snapshot) {
-            if (!snapshot.hasData)
+            if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
+            }
             final data = snapshot.data!;
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),

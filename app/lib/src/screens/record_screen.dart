@@ -306,6 +306,7 @@ class _RecordScreenState extends ConsumerState<RecordScreen> {
                   FloatingActionButton.large(
                     onPressed: () async {
                       if (!await _preRecordingChecklist(context)) return;
+                      if (!context.mounted) return;
                       if (!await _confirmCloudRecording(context)) return;
                       if (!context.mounted) return;
                       await ref

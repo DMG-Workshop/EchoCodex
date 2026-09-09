@@ -68,7 +68,10 @@ class _EchoCodexAppState extends ConsumerState<EchoCodexApp> {
     );
     final darkTheme = ThemeData(
       colorSchemeSeed: EchoCodexApp._seed,
-      brightness: Brightness.dThemeData(
+      brightness: Brightness.dark,
+      useMaterial3: true,
+    );
+    final highContrastLight = ThemeData(
       colorScheme: ColorScheme.highContrastLight(primary: Colors.black),
       brightness: Brightness.light,
       useMaterial3: true,
@@ -91,10 +94,7 @@ class _EchoCodexAppState extends ConsumerState<EchoCodexApp> {
             boldText: settings.highContrast,
           ),
           child: child!,
-        )ery.of(context).copyWith(
-          textScaler: TextScaler.linear(settings.textScale),
         ),
-        child: child!,
       ),
       home: _needsOnboarding
           ? OnboardingScreen(onDone: _finishOnboarding)
