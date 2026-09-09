@@ -274,6 +274,18 @@ class FakeRecordingRepository implements RecordingRepository {
       throw UnimplementedError();
 
   @override
+  Future<void> setLanguage(String recordingId, String? language) async {
+    _rows = [
+      for (final row in _rows)
+        if (row.id == recordingId)
+          row.copyWith(language: Value(language))
+        else
+          row,
+    ];
+    _controller.add(List.unmodifiable(_rows));
+  }
+
+  @override
   Future<void> deleteReminder(String recordingId, String taskId) async {}
 
   @override
@@ -283,6 +295,34 @@ class FakeRecordingRepository implements RecordingRepository {
       for (final row in _rows)
         if (row.id == recordingId)
           row.copyWith(speakerNamesJson: Value(jsonEncode(names)))
+        else
+          row,
+    ];
+    _controller.add(List.unmodifiable(_rows));
+  }
+
+  @override
+  Future<void> updateTranscriptSegment(
+      String recordingId, int index, String text) async {
+    _rows = [
+      for (final row in _rows)
+        if (row.id == recordingId && row.transcriptSegmentsJson != null)
+          () {
+            final decoded =
+                jsonDecode(row.transcriptSegmentsJson!) as List<dynamic>;
+            final segments = decoded
+                .whereType<Map>()
+                .map((item) => Map<String, dynamic>.from(item))
+                .toList();
+            if (index < 0 || index >= segments.length) return row;
+            segments[index]['text'] = text;
+            return row.copyWith(
+              transcriptSegmentsJson: Value(jsonEncode(segments)),
+              transcriptText: Value(
+                segments.map((s) => s['text'] as String? ?? '').join(' '),
+              ),
+            );
+          }()
         else
           row,
     ];

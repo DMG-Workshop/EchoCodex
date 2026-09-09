@@ -12,16 +12,16 @@ Original idea numbers are retained so references stay stable as completed ideas 
 
 ## Transcription and audio intelligence
 
-12. Let users correct transcript words while listening to the audio.
-13. Highlight the currently spoken transcript segment during playback.
-15. Let users choose transcription language per recording.
+12. Let users correct transcript words while listening to the audio. Done: playback bar with tap-to-edit segments in the transcript tab.
+13. Highlight the currently spoken transcript segment during playback. Done: same playback bar highlights the active segment as it plays.
+15. Let users choose transcription language per recording. Done: per-recording language override, set from the processing queue and applied on retry.
 18. Offer a glossary that learns preferred spellings locally.
 19. Add transcript confidence highlighting.
 20. Let users choose between speed, accuracy, and battery profiles.
 
 ## Summaries and structured notes
 
-21. Add summary presets for meetings, lectures, interviews, calls, and brainstorming.
+21. Add summary presets for meetings, lectures, interviews, calls, and brainstorming. Done: five built-in presets seeded as selectable note templates.
 23. Generate a short executive brief alongside the full note.
 24. Extract decisions separately from action items.
 25. Extract open questions and unresolved risks.
@@ -92,7 +92,7 @@ Original idea numbers are retained so references stay stable as completed ideas 
 
 ## Integrations
 
-108. Expand the Foundry VTT module beyond Journal import.
+108. Expand the Foundry VTT module beyond Journal import. Done: a file-picker import dialog plus per-task/decision/question document creation in `integrations/foundry_vtt`.
 
 ## Suggested first slice
 

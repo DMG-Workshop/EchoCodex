@@ -572,7 +572,9 @@ class RecordingController extends StateNotifier<RecordState> {
     }
     final templateInstructions = await _activeTemplateInstructions();
     await _consume(
-      _pipelineFor(providers, recording.audioPath!).resume(
+      _pipelineFor(providers, recording.audioPath!,
+              languageOverride: recording.language)
+          .resume(
         recordingId: recordingId,
         referenceDate: _isoDate(recording.startedAt),
         timeZone: DateTime.now().timeZoneName,
@@ -586,13 +588,16 @@ class RecordingController extends StateNotifier<RecordState> {
   }
 
   DurableRecordingPipeline _pipelineFor(
-          _Providers providers, String audioPath) =>
+    _Providers providers,
+    String audioPath, {
+    String? languageOverride,
+  }) =>
       DurableRecordingPipeline(
         queue: ChunkQueue(
           store: DriftChunkStore(_db),
           transcription: providers.transcription,
           audio: WavChunkReader(File(audioPath)),
-          languageHint: _languageHint,
+          languageHint: languageOverride ?? _languageHint,
           speakerLabels: _settings.workflowEnabled('speakerLabels'),
         ),
         structuring: StructuringPipeline(provider: providers.structuring),

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transcript_core/transcript_core.dart';
 
+import '../gemma/gemma_model_sheet.dart';
 import '../recording/recording_controller.dart';
 import '../screens/about_screen.dart';
 import '../screens/privacy_screen.dart';
@@ -422,6 +423,17 @@ class _StageSectionState extends ConsumerState<_StageSection> {
     await _persist();
   }
 
+  String _gemmaModelLabel() => _store.gemmaModelFileName ?? 'None chosen yet';
+
+  Future<void> _pickGemmaModel() async {
+    final picked = await showGemmaModelPicker(
+      context,
+      engine: ref.read(gemmaEngineProvider),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {});
+  }
+
   Future<void> _find() async {
     final server = await findLocalServer(context);
     if (server == null || !mounted) return;
@@ -535,6 +547,26 @@ class _StageSectionState extends ConsumerState<_StageSection> {
                   onPressed: _pickWhisperModel,
                   icon: const Icon(Icons.download_outlined, size: 18),
                   label: const Text('Choose model'),
+                ),
+              ],
+            ),
+          ),
+        if (_kind == ProviderKind.gemmaOnDevice)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Model: ${_gemmaModelLabel()}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: _pickGemmaModel,
+                  icon: const Icon(Icons.folder_open_outlined, size: 18),
+                  label: const Text('Choose model file'),
                 ),
               ],
             ),

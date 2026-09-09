@@ -139,6 +139,12 @@ class $RecordingsTable extends Recordings
   late final GeneratedColumn<String> templateId = GeneratedColumn<String>(
       'template_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _languageMeta =
+      const VerificationMeta('language');
+  @override
+  late final GeneratedColumn<String> language = GeneratedColumn<String>(
+      'language', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -160,7 +166,8 @@ class $RecordingsTable extends Recordings
         cleanedTranscriptText,
         priority,
         localOnly,
-        templateId
+        templateId,
+        language
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -282,6 +289,10 @@ class $RecordingsTable extends Recordings
           templateId.isAcceptableOrUnknown(
               data['template_id']!, _templateIdMeta));
     }
+    if (data.containsKey('language')) {
+      context.handle(_languageMeta,
+          language.isAcceptableOrUnknown(data['language']!, _languageMeta));
+    }
     return context;
   }
 
@@ -335,6 +346,8 @@ class $RecordingsTable extends Recordings
           .read(DriftSqlType.bool, data['${effectivePrefix}local_only'])!,
       templateId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}template_id']),
+      language: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}language']),
     );
   }
 
@@ -392,6 +405,11 @@ class Recording extends DataClass implements Insertable<Recording> {
 
   /// The template used to structure this recording, if any.
   final String? templateId;
+
+  /// BCP-47 override for this recording only, e.g. 'es-ES'. Null falls back to the
+  /// global transcription language setting — set here when the auto-detected or
+  /// default language turned out wrong for this particular recording.
+  final String? language;
   const Recording(
       {required this.id,
       required this.title,
@@ -412,7 +430,8 @@ class Recording extends DataClass implements Insertable<Recording> {
       this.cleanedTranscriptText,
       required this.priority,
       required this.localOnly,
-      this.templateId});
+      this.templateId,
+      this.language});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -465,6 +484,9 @@ class Recording extends DataClass implements Insertable<Recording> {
     map['local_only'] = Variable<bool>(localOnly);
     if (!nullToAbsent || templateId != null) {
       map['template_id'] = Variable<String>(templateId);
+    }
+    if (!nullToAbsent || language != null) {
+      map['language'] = Variable<String>(language);
     }
     return map;
   }
@@ -519,6 +541,9 @@ class Recording extends DataClass implements Insertable<Recording> {
       templateId: templateId == null && nullToAbsent
           ? const Value.absent()
           : Value(templateId),
+      language: language == null && nullToAbsent
+          ? const Value.absent()
+          : Value(language),
     );
   }
 
@@ -551,6 +576,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       priority: serializer.fromJson<bool>(json['priority']),
       localOnly: serializer.fromJson<bool>(json['localOnly']),
       templateId: serializer.fromJson<String?>(json['templateId']),
+      language: serializer.fromJson<String?>(json['language']),
     );
   }
   @override
@@ -581,6 +607,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       'priority': serializer.toJson<bool>(priority),
       'localOnly': serializer.toJson<bool>(localOnly),
       'templateId': serializer.toJson<String?>(templateId),
+      'language': serializer.toJson<String?>(language),
     };
   }
 
@@ -604,7 +631,8 @@ class Recording extends DataClass implements Insertable<Recording> {
           Value<String?> cleanedTranscriptText = const Value.absent(),
           bool? priority,
           bool? localOnly,
-          Value<String?> templateId = const Value.absent()}) =>
+          Value<String?> templateId = const Value.absent(),
+          Value<String?> language = const Value.absent()}) =>
       Recording(
         id: id ?? this.id,
         title: title ?? this.title,
@@ -643,6 +671,7 @@ class Recording extends DataClass implements Insertable<Recording> {
         priority: priority ?? this.priority,
         localOnly: localOnly ?? this.localOnly,
         templateId: templateId.present ? templateId.value : this.templateId,
+        language: language.present ? language.value : this.language,
       );
   Recording copyWithCompanion(RecordingsCompanion data) {
     return Recording(
@@ -689,6 +718,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       localOnly: data.localOnly.present ? data.localOnly.value : this.localOnly,
       templateId:
           data.templateId.present ? data.templateId.value : this.templateId,
+      language: data.language.present ? data.language.value : this.language,
     );
   }
 
@@ -714,33 +744,36 @@ class Recording extends DataClass implements Insertable<Recording> {
           ..write('cleanedTranscriptText: $cleanedTranscriptText, ')
           ..write('priority: $priority, ')
           ..write('localOnly: $localOnly, ')
-          ..write('templateId: $templateId')
+          ..write('templateId: $templateId, ')
+          ..write('language: $language')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
-      id,
-      title,
-      startedAt,
-      durationMs,
-      audioPath,
-      transcriptionProviderId,
-      structuringProviderId,
-      structuringModel,
-      noteJson,
-      noteSchemaVersion,
-      promptVersion,
-      inputTokens,
-      outputTokens,
-      transcriptText,
-      transcriptSegmentsJson,
-      speakerNamesJson,
-      cleanedTranscriptText,
-      priority,
-      localOnly,
-      templateId);
+  int get hashCode => Object.hashAll([
+        id,
+        title,
+        startedAt,
+        durationMs,
+        audioPath,
+        transcriptionProviderId,
+        structuringProviderId,
+        structuringModel,
+        noteJson,
+        noteSchemaVersion,
+        promptVersion,
+        inputTokens,
+        outputTokens,
+        transcriptText,
+        transcriptSegmentsJson,
+        speakerNamesJson,
+        cleanedTranscriptText,
+        priority,
+        localOnly,
+        templateId,
+        language
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -764,7 +797,8 @@ class Recording extends DataClass implements Insertable<Recording> {
           other.cleanedTranscriptText == this.cleanedTranscriptText &&
           other.priority == this.priority &&
           other.localOnly == this.localOnly &&
-          other.templateId == this.templateId);
+          other.templateId == this.templateId &&
+          other.language == this.language);
 }
 
 class RecordingsCompanion extends UpdateCompanion<Recording> {
@@ -788,6 +822,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
   final Value<bool> priority;
   final Value<bool> localOnly;
   final Value<String?> templateId;
+  final Value<String?> language;
   final Value<int> rowid;
   const RecordingsCompanion({
     this.id = const Value.absent(),
@@ -810,6 +845,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     this.priority = const Value.absent(),
     this.localOnly = const Value.absent(),
     this.templateId = const Value.absent(),
+    this.language = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RecordingsCompanion.insert({
@@ -833,6 +869,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     this.priority = const Value.absent(),
     this.localOnly = const Value.absent(),
     this.templateId = const Value.absent(),
+    this.language = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         startedAt = Value(startedAt);
@@ -857,6 +894,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     Expression<bool>? priority,
     Expression<bool>? localOnly,
     Expression<String>? templateId,
+    Expression<String>? language,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -884,6 +922,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       if (priority != null) 'priority': priority,
       if (localOnly != null) 'local_only': localOnly,
       if (templateId != null) 'template_id': templateId,
+      if (language != null) 'language': language,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -909,6 +948,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       Value<bool>? priority,
       Value<bool>? localOnly,
       Value<String?>? templateId,
+      Value<String?>? language,
       Value<int>? rowid}) {
     return RecordingsCompanion(
       id: id ?? this.id,
@@ -935,6 +975,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       priority: priority ?? this.priority,
       localOnly: localOnly ?? this.localOnly,
       templateId: templateId ?? this.templateId,
+      language: language ?? this.language,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1006,6 +1047,9 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     if (templateId.present) {
       map['template_id'] = Variable<String>(templateId.value);
     }
+    if (language.present) {
+      map['language'] = Variable<String>(language.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1035,6 +1079,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
           ..write('priority: $priority, ')
           ..write('localOnly: $localOnly, ')
           ..write('templateId: $templateId, ')
+          ..write('language: $language, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2717,6 +2762,374 @@ class PrivacyAuditsCompanion extends UpdateCompanion<PrivacyAudit> {
   }
 }
 
+class $CodexNotesTable extends CodexNotes
+    with TableInfo<$CodexNotesTable, CodexNote> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CodexNotesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+      'body', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _sourceRecordingIdMeta =
+      const VerificationMeta('sourceRecordingId');
+  @override
+  late final GeneratedColumn<String> sourceRecordingId =
+      GeneratedColumn<String>('source_recording_id', aliasedName, true,
+          type: DriftSqlType.string,
+          requiredDuringInsert: false,
+          defaultConstraints: GeneratedColumn.constraintIsAlways(
+              'REFERENCES recordings (id) ON DELETE SET NULL'));
+  static const VerificationMeta _sourceRecordingTitleMeta =
+      const VerificationMeta('sourceRecordingTitle');
+  @override
+  late final GeneratedColumn<String> sourceRecordingTitle =
+      GeneratedColumn<String>('source_recording_title', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, body, createdAt, updatedAt, sourceRecordingId, sourceRecordingTitle];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'codex_notes';
+  @override
+  VerificationContext validateIntegrity(Insertable<CodexNote> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+          _bodyMeta, body.isAcceptableOrUnknown(data['body']!, _bodyMeta));
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('source_recording_id')) {
+      context.handle(
+          _sourceRecordingIdMeta,
+          sourceRecordingId.isAcceptableOrUnknown(
+              data['source_recording_id']!, _sourceRecordingIdMeta));
+    }
+    if (data.containsKey('source_recording_title')) {
+      context.handle(
+          _sourceRecordingTitleMeta,
+          sourceRecordingTitle.isAcceptableOrUnknown(
+              data['source_recording_title']!, _sourceRecordingTitleMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CodexNote map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CodexNote(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      body: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}body'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      sourceRecordingId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}source_recording_id']),
+      sourceRecordingTitle: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}source_recording_title']),
+    );
+  }
+
+  @override
+  $CodexNotesTable createAlias(String alias) {
+    return $CodexNotesTable(attachedDatabase, alias);
+  }
+}
+
+class CodexNote extends DataClass implements Insertable<CodexNote> {
+  final String id;
+  final String body;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String? sourceRecordingId;
+  final String? sourceRecordingTitle;
+  const CodexNote(
+      {required this.id,
+      required this.body,
+      required this.createdAt,
+      required this.updatedAt,
+      this.sourceRecordingId,
+      this.sourceRecordingTitle});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['body'] = Variable<String>(body);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || sourceRecordingId != null) {
+      map['source_recording_id'] = Variable<String>(sourceRecordingId);
+    }
+    if (!nullToAbsent || sourceRecordingTitle != null) {
+      map['source_recording_title'] = Variable<String>(sourceRecordingTitle);
+    }
+    return map;
+  }
+
+  CodexNotesCompanion toCompanion(bool nullToAbsent) {
+    return CodexNotesCompanion(
+      id: Value(id),
+      body: Value(body),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      sourceRecordingId: sourceRecordingId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceRecordingId),
+      sourceRecordingTitle: sourceRecordingTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceRecordingTitle),
+    );
+  }
+
+  factory CodexNote.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CodexNote(
+      id: serializer.fromJson<String>(json['id']),
+      body: serializer.fromJson<String>(json['body']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      sourceRecordingId:
+          serializer.fromJson<String?>(json['sourceRecordingId']),
+      sourceRecordingTitle:
+          serializer.fromJson<String?>(json['sourceRecordingTitle']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'body': serializer.toJson<String>(body),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'sourceRecordingId': serializer.toJson<String?>(sourceRecordingId),
+      'sourceRecordingTitle': serializer.toJson<String?>(sourceRecordingTitle),
+    };
+  }
+
+  CodexNote copyWith(
+          {String? id,
+          String? body,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<String?> sourceRecordingId = const Value.absent(),
+          Value<String?> sourceRecordingTitle = const Value.absent()}) =>
+      CodexNote(
+        id: id ?? this.id,
+        body: body ?? this.body,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        sourceRecordingId: sourceRecordingId.present
+            ? sourceRecordingId.value
+            : this.sourceRecordingId,
+        sourceRecordingTitle: sourceRecordingTitle.present
+            ? sourceRecordingTitle.value
+            : this.sourceRecordingTitle,
+      );
+  CodexNote copyWithCompanion(CodexNotesCompanion data) {
+    return CodexNote(
+      id: data.id.present ? data.id.value : this.id,
+      body: data.body.present ? data.body.value : this.body,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      sourceRecordingId: data.sourceRecordingId.present
+          ? data.sourceRecordingId.value
+          : this.sourceRecordingId,
+      sourceRecordingTitle: data.sourceRecordingTitle.present
+          ? data.sourceRecordingTitle.value
+          : this.sourceRecordingTitle,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CodexNote(')
+          ..write('id: $id, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('sourceRecordingId: $sourceRecordingId, ')
+          ..write('sourceRecordingTitle: $sourceRecordingTitle')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, body, createdAt, updatedAt, sourceRecordingId, sourceRecordingTitle);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CodexNote &&
+          other.id == this.id &&
+          other.body == this.body &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.sourceRecordingId == this.sourceRecordingId &&
+          other.sourceRecordingTitle == this.sourceRecordingTitle);
+}
+
+class CodexNotesCompanion extends UpdateCompanion<CodexNote> {
+  final Value<String> id;
+  final Value<String> body;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<String?> sourceRecordingId;
+  final Value<String?> sourceRecordingTitle;
+  final Value<int> rowid;
+  const CodexNotesCompanion({
+    this.id = const Value.absent(),
+    this.body = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.sourceRecordingId = const Value.absent(),
+    this.sourceRecordingTitle = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CodexNotesCompanion.insert({
+    required String id,
+    required String body,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.sourceRecordingId = const Value.absent(),
+    this.sourceRecordingTitle = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        body = Value(body),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<CodexNote> custom({
+    Expression<String>? id,
+    Expression<String>? body,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<String>? sourceRecordingId,
+    Expression<String>? sourceRecordingTitle,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (body != null) 'body': body,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (sourceRecordingId != null) 'source_recording_id': sourceRecordingId,
+      if (sourceRecordingTitle != null)
+        'source_recording_title': sourceRecordingTitle,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CodexNotesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? body,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<String?>? sourceRecordingId,
+      Value<String?>? sourceRecordingTitle,
+      Value<int>? rowid}) {
+    return CodexNotesCompanion(
+      id: id ?? this.id,
+      body: body ?? this.body,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      sourceRecordingId: sourceRecordingId ?? this.sourceRecordingId,
+      sourceRecordingTitle: sourceRecordingTitle ?? this.sourceRecordingTitle,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (sourceRecordingId.present) {
+      map['source_recording_id'] = Variable<String>(sourceRecordingId.value);
+    }
+    if (sourceRecordingTitle.present) {
+      map['source_recording_title'] =
+          Variable<String>(sourceRecordingTitle.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CodexNotesCompanion(')
+          ..write('id: $id, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('sourceRecordingId: $sourceRecordingId, ')
+          ..write('sourceRecordingTitle: $sourceRecordingTitle, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$TranscriptDatabase extends GeneratedDatabase {
   _$TranscriptDatabase(QueryExecutor e) : super(e);
   $TranscriptDatabaseManager get managers => $TranscriptDatabaseManager(this);
@@ -2726,12 +3139,19 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
   late final $ActionRemindersTable actionReminders =
       $ActionRemindersTable(this);
   late final $PrivacyAuditsTable privacyAudits = $PrivacyAuditsTable(this);
+  late final $CodexNotesTable codexNotes = $CodexNotesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
   @override
-  List<DatabaseSchemaEntity> get allSchemaEntities =>
-      [recordings, chunks, noteTemplates, actionReminders, privacyAudits];
+  List<DatabaseSchemaEntity> get allSchemaEntities => [
+        recordings,
+        chunks,
+        noteTemplates,
+        actionReminders,
+        privacyAudits,
+        codexNotes
+      ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
         [
@@ -2747,6 +3167,13 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
                 limitUpdateKind: UpdateKind.delete),
             result: [
               TableUpdate('action_reminders', kind: UpdateKind.delete),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('recordings',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('codex_notes', kind: UpdateKind.update),
             ],
           ),
         ],
@@ -2774,6 +3201,7 @@ typedef $$RecordingsTableCreateCompanionBuilder = RecordingsCompanion Function({
   Value<bool> priority,
   Value<bool> localOnly,
   Value<String?> templateId,
+  Value<String?> language,
   Value<int> rowid,
 });
 typedef $$RecordingsTableUpdateCompanionBuilder = RecordingsCompanion Function({
@@ -2797,6 +3225,7 @@ typedef $$RecordingsTableUpdateCompanionBuilder = RecordingsCompanion Function({
   Value<bool> priority,
   Value<bool> localOnly,
   Value<String?> templateId,
+  Value<String?> language,
   Value<int> rowid,
 });
 
@@ -2830,6 +3259,20 @@ final class $$RecordingsTableReferences
 
     final cache =
         $_typedResult.readTableOrNull(_actionRemindersRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$CodexNotesTable, List<CodexNote>>
+      _codexNotesRefsTable(_$TranscriptDatabase db) =>
+          MultiTypedResultKey.fromTable(db.codexNotes,
+              aliasName: 'recordings__id__codex_notes__source_recording_id');
+
+  $$CodexNotesTableProcessedTableManager get codexNotesRefs {
+    final manager = $$CodexNotesTableTableManager($_db, $_db.codexNotes).filter(
+        (f) => f.sourceRecordingId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_codexNotesRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -2912,6 +3355,9 @@ class $$RecordingsTableFilterComposer
   ColumnFilters<String> get templateId => $composableBuilder(
       column: $table.templateId, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get language => $composableBuilder(
+      column: $table.language, builder: (column) => ColumnFilters(column));
+
   Expression<bool> chunksRefs(
       Expression<bool> Function($$ChunksTableFilterComposer f) f) {
     final $$ChunksTableFilterComposer composer = $composerBuilder(
@@ -2946,6 +3392,27 @@ class $$RecordingsTableFilterComposer
             $$ActionRemindersTableFilterComposer(
               $db: $db,
               $table: $db.actionReminders,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> codexNotesRefs(
+      Expression<bool> Function($$CodexNotesTableFilterComposer f) f) {
+    final $$CodexNotesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.codexNotes,
+        getReferencedColumn: (t) => t.sourceRecordingId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CodexNotesTableFilterComposer(
+              $db: $db,
+              $table: $db.codexNotes,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -3033,6 +3500,9 @@ class $$RecordingsTableOrderingComposer
 
   ColumnOrderings<String> get templateId => $composableBuilder(
       column: $table.templateId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get language => $composableBuilder(
+      column: $table.language, builder: (column) => ColumnOrderings(column));
 }
 
 class $$RecordingsTableAnnotationComposer
@@ -3104,6 +3574,9 @@ class $$RecordingsTableAnnotationComposer
   GeneratedColumn<String> get templateId => $composableBuilder(
       column: $table.templateId, builder: (column) => column);
 
+  GeneratedColumn<String> get language =>
+      $composableBuilder(column: $table.language, builder: (column) => column);
+
   Expression<T> chunksRefs<T extends Object>(
       Expression<T> Function($$ChunksTableAnnotationComposer a) f) {
     final $$ChunksTableAnnotationComposer composer = $composerBuilder(
@@ -3145,6 +3618,27 @@ class $$RecordingsTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> codexNotesRefs<T extends Object>(
+      Expression<T> Function($$CodexNotesTableAnnotationComposer a) f) {
+    final $$CodexNotesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.codexNotes,
+        getReferencedColumn: (t) => t.sourceRecordingId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$CodexNotesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.codexNotes,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$RecordingsTableTableManager extends RootTableManager<
@@ -3158,7 +3652,8 @@ class $$RecordingsTableTableManager extends RootTableManager<
     $$RecordingsTableUpdateCompanionBuilder,
     (Recording, $$RecordingsTableReferences),
     Recording,
-    PrefetchHooks Function({bool chunksRefs, bool actionRemindersRefs})> {
+    PrefetchHooks Function(
+        {bool chunksRefs, bool actionRemindersRefs, bool codexNotesRefs})> {
   $$RecordingsTableTableManager(_$TranscriptDatabase db, $RecordingsTable table)
       : super(TableManagerState(
           db: db,
@@ -3190,6 +3685,7 @@ class $$RecordingsTableTableManager extends RootTableManager<
             Value<bool> priority = const Value.absent(),
             Value<bool> localOnly = const Value.absent(),
             Value<String?> templateId = const Value.absent(),
+            Value<String?> language = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               RecordingsCompanion(
@@ -3213,6 +3709,7 @@ class $$RecordingsTableTableManager extends RootTableManager<
             priority: priority,
             localOnly: localOnly,
             templateId: templateId,
+            language: language,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -3236,6 +3733,7 @@ class $$RecordingsTableTableManager extends RootTableManager<
             Value<bool> priority = const Value.absent(),
             Value<bool> localOnly = const Value.absent(),
             Value<String?> templateId = const Value.absent(),
+            Value<String?> language = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               RecordingsCompanion.insert(
@@ -3259,6 +3757,7 @@ class $$RecordingsTableTableManager extends RootTableManager<
             priority: priority,
             localOnly: localOnly,
             templateId: templateId,
+            language: language,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -3268,12 +3767,15 @@ class $$RecordingsTableTableManager extends RootTableManager<
                   ))
               .toList(),
           prefetchHooksCallback: (
-              {chunksRefs = false, actionRemindersRefs = false}) {
+              {chunksRefs = false,
+              actionRemindersRefs = false,
+              codexNotesRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (chunksRefs) db.chunks,
-                if (actionRemindersRefs) db.actionReminders
+                if (actionRemindersRefs) db.actionReminders,
+                if (codexNotesRefs) db.codexNotes
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -3303,6 +3805,19 @@ class $$RecordingsTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem:
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.recordingId == item.id),
+                        typedResults: items),
+                  if (codexNotesRefs)
+                    await $_getPrefetchedData<Recording, $RecordingsTable,
+                            CodexNote>(
+                        currentTable: table,
+                        referencedTable: $$RecordingsTableReferences
+                            ._codexNotesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$RecordingsTableReferences(db, table, p0)
+                                .codexNotesRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.sourceRecordingId == item.id),
                         typedResults: items)
                 ];
               },
@@ -3322,7 +3837,8 @@ typedef $$RecordingsTableProcessedTableManager = ProcessedTableManager<
     $$RecordingsTableUpdateCompanionBuilder,
     (Recording, $$RecordingsTableReferences),
     Recording,
-    PrefetchHooks Function({bool chunksRefs, bool actionRemindersRefs})>;
+    PrefetchHooks Function(
+        {bool chunksRefs, bool actionRemindersRefs, bool codexNotesRefs})>;
 typedef $$ChunksTableCreateCompanionBuilder = ChunksCompanion Function({
   required String id,
   required String recordingId,
@@ -4388,6 +4904,297 @@ typedef $$PrivacyAuditsTableProcessedTableManager = ProcessedTableManager<
     ),
     PrivacyAudit,
     PrefetchHooks Function()>;
+typedef $$CodexNotesTableCreateCompanionBuilder = CodexNotesCompanion Function({
+  required String id,
+  required String body,
+  required DateTime createdAt,
+  required DateTime updatedAt,
+  Value<String?> sourceRecordingId,
+  Value<String?> sourceRecordingTitle,
+  Value<int> rowid,
+});
+typedef $$CodexNotesTableUpdateCompanionBuilder = CodexNotesCompanion Function({
+  Value<String> id,
+  Value<String> body,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<String?> sourceRecordingId,
+  Value<String?> sourceRecordingTitle,
+  Value<int> rowid,
+});
+
+final class $$CodexNotesTableReferences
+    extends BaseReferences<_$TranscriptDatabase, $CodexNotesTable, CodexNote> {
+  $$CodexNotesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $RecordingsTable _sourceRecordingIdTable(_$TranscriptDatabase db) =>
+      db.recordings
+          .createAlias('codex_notes__source_recording_id__recordings__id');
+
+  $$RecordingsTableProcessedTableManager? get sourceRecordingId {
+    final $_column = $_itemColumn<String>('source_recording_id');
+    if ($_column == null) return null;
+    final manager = $$RecordingsTableTableManager($_db, $_db.recordings)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_sourceRecordingIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$CodexNotesTableFilterComposer
+    extends Composer<_$TranscriptDatabase, $CodexNotesTable> {
+  $$CodexNotesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get body => $composableBuilder(
+      column: $table.body, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sourceRecordingTitle => $composableBuilder(
+      column: $table.sourceRecordingTitle,
+      builder: (column) => ColumnFilters(column));
+
+  $$RecordingsTableFilterComposer get sourceRecordingId {
+    final $$RecordingsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.sourceRecordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableFilterComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$CodexNotesTableOrderingComposer
+    extends Composer<_$TranscriptDatabase, $CodexNotesTable> {
+  $$CodexNotesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get body => $composableBuilder(
+      column: $table.body, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sourceRecordingTitle => $composableBuilder(
+      column: $table.sourceRecordingTitle,
+      builder: (column) => ColumnOrderings(column));
+
+  $$RecordingsTableOrderingComposer get sourceRecordingId {
+    final $$RecordingsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.sourceRecordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableOrderingComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$CodexNotesTableAnnotationComposer
+    extends Composer<_$TranscriptDatabase, $CodexNotesTable> {
+  $$CodexNotesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceRecordingTitle => $composableBuilder(
+      column: $table.sourceRecordingTitle, builder: (column) => column);
+
+  $$RecordingsTableAnnotationComposer get sourceRecordingId {
+    final $$RecordingsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.sourceRecordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$CodexNotesTableTableManager extends RootTableManager<
+    _$TranscriptDatabase,
+    $CodexNotesTable,
+    CodexNote,
+    $$CodexNotesTableFilterComposer,
+    $$CodexNotesTableOrderingComposer,
+    $$CodexNotesTableAnnotationComposer,
+    $$CodexNotesTableCreateCompanionBuilder,
+    $$CodexNotesTableUpdateCompanionBuilder,
+    (CodexNote, $$CodexNotesTableReferences),
+    CodexNote,
+    PrefetchHooks Function({bool sourceRecordingId})> {
+  $$CodexNotesTableTableManager(_$TranscriptDatabase db, $CodexNotesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CodexNotesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CodexNotesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CodexNotesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> body = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<String?> sourceRecordingId = const Value.absent(),
+            Value<String?> sourceRecordingTitle = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CodexNotesCompanion(
+            id: id,
+            body: body,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            sourceRecordingId: sourceRecordingId,
+            sourceRecordingTitle: sourceRecordingTitle,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String body,
+            required DateTime createdAt,
+            required DateTime updatedAt,
+            Value<String?> sourceRecordingId = const Value.absent(),
+            Value<String?> sourceRecordingTitle = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CodexNotesCompanion.insert(
+            id: id,
+            body: body,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            sourceRecordingId: sourceRecordingId,
+            sourceRecordingTitle: sourceRecordingTitle,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable<$CodexNotesTable, CodexNote>(table),
+                    $$CodexNotesTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({sourceRecordingId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (sourceRecordingId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.sourceRecordingId,
+                    referencedTable:
+                        $$CodexNotesTableReferences._sourceRecordingIdTable(db),
+                    referencedColumn: $$CodexNotesTableReferences
+                        ._sourceRecordingIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$CodexNotesTableProcessedTableManager = ProcessedTableManager<
+    _$TranscriptDatabase,
+    $CodexNotesTable,
+    CodexNote,
+    $$CodexNotesTableFilterComposer,
+    $$CodexNotesTableOrderingComposer,
+    $$CodexNotesTableAnnotationComposer,
+    $$CodexNotesTableCreateCompanionBuilder,
+    $$CodexNotesTableUpdateCompanionBuilder,
+    (CodexNote, $$CodexNotesTableReferences),
+    CodexNote,
+    PrefetchHooks Function({bool sourceRecordingId})>;
 
 class $TranscriptDatabaseManager {
   final _$TranscriptDatabase _db;
@@ -4402,4 +5209,6 @@ class $TranscriptDatabaseManager {
       $$ActionRemindersTableTableManager(_db, _db.actionReminders);
   $$PrivacyAuditsTableTableManager get privacyAudits =>
       $$PrivacyAuditsTableTableManager(_db, _db.privacyAudits);
+  $$CodexNotesTableTableManager get codexNotes =>
+      $$CodexNotesTableTableManager(_db, _db.codexNotes);
 }

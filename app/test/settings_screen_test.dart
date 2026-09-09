@@ -335,13 +335,16 @@ void main() {
   });
 
   group('testing a keyless provider', () {
-    ProviderFactory factoryWith(LiveTranscriptionSource source) =>
-        ProviderFactory(
-          RecordingTransport(const []),
-          InMemoryKeyStore(),
-          whisperEngine: _UnusedWhisperEngine(),
-          liveSource: () => source,
-        );
+    Future<ProviderFactory> factoryWith(LiveTranscriptionSource source) async {
+      final prefs = await SharedPreferences.getInstance();
+      return ProviderFactory(
+        RecordingTransport(const []),
+        InMemoryKeyStore(),
+        SettingsStore(prefs),
+        whisperEngine: _UnusedWhisperEngine(),
+        liveSource: () => source,
+      );
+    }
 
     test('on-device recognition is tested, not told to paste a key', () async {
       // On a real device this reported "Paste a key above, then test again" for a
@@ -349,7 +352,7 @@ void main() {
       // (it listens to the mic, so it is a LiveTranscriptionSource) and the null
       // branch assumed a missing key was the only way to get there.
       final controller = ConnectionTestController(
-        factoryWith(_FakeLiveSource(
+        await factoryWith(_FakeLiveSource(
           ConnectionResult.success(summary: 'Ready · on-device · 3 languages'),
         )),
       );
@@ -367,7 +370,7 @@ void main() {
     test('an unavailable recognizer reports why, without mentioning keys',
         () async {
       final controller = ConnectionTestController(
-        factoryWith(_FakeLiveSource(
+        await factoryWith(_FakeLiveSource(
           ConnectionResult.failure(
             summary: 'Speech recognition is unavailable on this device',
             remedy: 'Check that dictation is enabled in system settings.',

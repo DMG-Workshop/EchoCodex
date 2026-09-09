@@ -71,6 +71,11 @@ dependencies:
   tray_manager: ^0.5.3
   window_manager: ^0.5.2
 
+  # On-device Gemma structuring: loads a .litertlm bundle the user already downloaded
+  # and runs it through Google's LiteRT-LM runtime, entirely on this device.
+  flutter_gemma: ^1.7.4
+  flutter_gemma_litertlm: ^1.6.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

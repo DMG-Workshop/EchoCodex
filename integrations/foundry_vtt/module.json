@@ -2,7 +2,7 @@
   "id": "echo-codex-notes",
   "title": "Echo Codex Notes",
   "description": "Import Echo Codex campaign notes, summaries, decisions, tasks, and transcripts into Foundry VTT journals.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "compatibility": {
     "minimum": "12",
     "verified": "13"
