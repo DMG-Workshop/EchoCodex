@@ -3,10 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:echo_codex_app/src/recording/recording_controller.dart';
 import 'package:echo_codex_app/src/screens/export_sheet.dart';
 import 'package:echo_codex_app/src/screens/note_screen.dart';
 import 'package:echo_codex_app/src/screens/timeline_view.dart';
+import 'package:echo_codex_app/src/settings/provider_config.dart';
 import 'package:transcript_core/transcript_core.dart';
 
 import 'fixtures.dart';
@@ -30,12 +32,15 @@ void main() {
 
   Future<void> pumpTimeline(WidgetTester tester,
       {Map<String, dynamic>? note}) async {
+    SharedPreferences.setMockInitialValues(const {});
+    final prefs = await SharedPreferences.getInstance();
     final row = recordingRow(
       overrideNote: note == null ? null : jsonEncode(note),
     );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
           recordingsProvider.overrideWith((ref) => Stream.value([row])),
         ],
         child: const MaterialApp(home: NoteScreen(recordingId: 'r_1')),
