@@ -24,6 +24,15 @@ class OnDeviceSpeechSource extends LiveTranscriptionSource {
   static const Duration _sessionLength = Duration(minutes: 1);
   static const Duration _pauseTolerance = Duration(seconds: 30);
 
+  /// How long `speech_to_text` waits after a stop for the platform's own final result
+  /// before promoting the last partial one itself. Passed explicitly rather than left to
+  /// the package default, because [stop] has to outwait it to catch that promotion.
+  static const Duration _finalTimeout = Duration(seconds: 2);
+
+  /// Ceiling on how long [stop] waits for that final result — [_finalTimeout] plus
+  /// enough margin for the callback to make the trip.
+  static const Duration _finalGrace = Duration(milliseconds: 2500);
+
   final stt.SpeechToText _speech;
   final DateTime Function() _now;
   final _segments = StreamController<TranscriptSegment>.broadcast();
@@ -31,6 +40,9 @@ class OnDeviceSpeechSource extends LiveTranscriptionSource {
   DateTime? _startedAt;
   bool _stopping = false;
   int _lastFinalEndMs = 0;
+
+  /// Completed by the first final result to arrive after [stop] asked for one.
+  Completer<void>? _finalPending;
 
   @override
   Stream<TranscriptSegment> get segments => _segments.stream;
@@ -61,6 +73,7 @@ class OnDeviceSpeechSource extends LiveTranscriptionSource {
       onError: (_) {},
       onStatus: (_) {},
       debugLogging: false,
+      finalTimeout: _finalTimeout,
     );
 
     if (!available) {
@@ -81,7 +94,13 @@ class OnDeviceSpeechSource extends LiveTranscriptionSource {
 
   @override
   Future<void> start({String? languageHint}) async {
-    if (!await _speech.initialize(onError: _onError, onStatus: _onStatus)) {
+    // initialize() short-circuits once it has worked, so whichever call lands first sets
+    // the timeout for the session — both pass the same one so it holds either way.
+    if (!await _speech.initialize(
+      onError: _onError,
+      onStatus: _onStatus,
+      finalTimeout: _finalTimeout,
+    )) {
       throw StateError('Speech recognition is unavailable on this device.');
     }
     _startedAt = _now();
@@ -108,16 +127,35 @@ class OnDeviceSpeechSource extends LiveTranscriptionSource {
   @override
   Future<void> stop() async {
     _stopping = true;
+    final pending = _finalPending = Completer<void>();
     await _speech.stop();
-    // Give the platform a moment to deliver the final result before closing the stream,
-    // or the last sentence of the meeting is lost.
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    // `speech_to_text` answers a stop by waiting up to its finalTimeout for the
+    // platform's own final result and, failing that, promoting the last partial one — so
+    // the closing utterance can land a full two seconds after this call. On a recording
+    // short enough that neither listenFor nor pauseFor ever elapsed, that promoted
+    // result is the whole transcript, and closing the stream on a fixed shorter delay
+    // threw it away — which is why on-device recognition produced nothing at all.
+    // Waiting on the result itself keeps the common case fast: a platform that finalises
+    // promptly releases this immediately, and the ceiling only applies to silence.
+    await pending.future.timeout(_finalGrace, onTimeout: () {});
+    _finalPending = null;
     await _segments.close();
     _startedAt = null;
   }
 
   void _onResult(SpeechRecognitionResult result) {
-    if (!result.finalResult || result.recognizedWords.trim().isEmpty) return;
+    // stop() waits for a final result but not forever, so one can still arrive after
+    // the stream is closed — adding to a closed controller throws, and the recording is
+    // over by then anyway.
+    if (_segments.isClosed) return;
+    if (!result.finalResult) return;
+
+    // Any final result releases stop(), an empty one included: a recording nobody spoke
+    // into should not sit out the whole grace period waiting for words that never came.
+    final pending = _finalPending;
+    if (pending != null && !pending.isCompleted) pending.complete();
+
+    if (result.recognizedWords.trim().isEmpty) return;
 
     final endMs = _elapsedMs();
     _segments.add(TranscriptSegment(
