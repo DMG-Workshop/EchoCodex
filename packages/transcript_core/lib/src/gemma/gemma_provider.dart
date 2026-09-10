@@ -27,6 +27,14 @@ abstract class GemmaEngine {
   /// Info about the model currently installed and selected, or null if none is ready.
   Future<GemmaModelInfo?> currentModel();
 
+  /// The configured model's context window, read synchronously so
+  /// [GemmaStructuringProvider.capabilities] can report it without an async round trip
+  /// — the pipeline reads capabilities before the first [generate] call, to decide
+  /// single-pass vs. map/reduce chunking. Zero means unknown, same convention as
+  /// [GemmaModelInfo.contextWindowTokens]: the pipeline then falls back to a
+  /// conservative assumed window rather than guessing too high and truncating.
+  int get contextWindowTokens => 0;
+
   /// Runs one structuring turn against the currently loaded model. Callers must not
   /// call this without first confirming [currentModel] is non-null.
   Future<String> generate({
@@ -58,13 +66,14 @@ class GemmaStructuringProvider extends StructuringProvider {
   bool get isLocalEndpoint => true;
 
   @override
-  ProviderCapabilities get capabilities => const ProviderCapabilities(
+  ProviderCapabilities get capabilities => ProviderCapabilities(
         acceptsAudio: false,
         acceptsText: true,
         nativeJsonSchema: false,
         requiresApiKey: false,
         runsOnDevice: true,
         maxOutputTokens: 2048,
+        contextWindowTokens: _engine.contextWindowTokens,
       );
 
   @override
