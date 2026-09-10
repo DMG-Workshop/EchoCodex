@@ -170,6 +170,50 @@ void main() {
     });
   });
 
+  group('failure reporting', () {
+    test(
+        'the model\'s reply is shown, since the violations alone do not say '
+        'whether it answered at all', () {
+      const failure = StructuringException(
+        'The model could not produce a valid note after 3 attempts.',
+        violations: ['(root): response did not contain a JSON object'],
+        lastResponse: 'Sure! Here are your notes in plain English instead.',
+      );
+
+      expect(failure.toString(), contains('did not contain a JSON object'));
+      expect(failure.toString(), contains('plain English instead'));
+    });
+
+    test('an empty reply says so, rather than trailing off into nothing', () {
+      const failure = StructuringException(
+        'The model could not produce a valid note after 3 attempts.',
+        violations: ['(root): response did not contain a JSON object'],
+        lastResponse: '   ',
+      );
+
+      expect(failure.toString(), contains('(nothing at all)'),
+          reason: 'a model that returned silence and one that returned prose '
+              'fail identically otherwise, and are fixed differently');
+    });
+
+    test('a long reply is excerpted, not pasted whole into the error', () {
+      final failure = StructuringException(
+        'The model could not produce a valid note after 3 attempts.',
+        lastResponse: 'x' * 5000,
+      );
+
+      expect(failure.toString().length, lessThan(700));
+      expect(failure.toString(), contains('…'));
+    });
+
+    test('a failure with no reply to report reads as it always did', () {
+      const failure = StructuringException('The transcript is empty.');
+
+      expect(
+          failure.toString(), 'StructuringException: The transcript is empty.');
+    });
+  });
+
   group('quote verification', () {
     test('a task citing words never spoken is flagged, not dropped', () async {
       final fabricated = validNoteJson();
