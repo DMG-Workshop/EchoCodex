@@ -117,6 +117,12 @@ class OnDeviceSpeechSource extends LiveTranscriptionSource {
   }
 
   void _onResult(SpeechRecognitionResult result) {
+    // stop() closes the stream after a fixed grace period, but the plugin's own
+    // finalization timer (_onFinalTimeout) isn't guaranteed to land inside that window —
+    // when it fires late, this is called after close() and adding would throw. The
+    // recording has already ended by then; dropping one last, late result is the correct
+    // trade against crashing the app on the way out.
+    if (_segments.isClosed) return;
     if (!result.finalResult || result.recognizedWords.trim().isEmpty) return;
 
     final endMs = _elapsedMs();
