@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import '../providers/capabilities.dart';
 import '../providers/connection.dart';
 import '../providers/provider.dart';
+import '../schema/dialects.dart';
 
 /// What the app knows about the on-device model currently loaded, without knowing
 /// anything about how it was loaded — that part is native and lives behind
@@ -37,9 +40,15 @@ abstract class GemmaEngine {
 
   /// Runs one structuring turn against the currently loaded model. Callers must not
   /// call this without first confirming [currentModel] is non-null.
+  ///
+  /// [priorTurns] replays earlier user/assistant messages onto the (otherwise fresh)
+  /// chat before [userContent] — the repair loop's follow-up turns, most often. Without
+  /// this a "retry" would just re-ask the original question with no memory of what was
+  /// wrong with the last answer, since each call starts a new chat.
   Future<String> generate({
     required String systemPrompt,
     required String userContent,
+    List<StructureTurn> priorTurns = const [],
     int maxOutputTokens = 2048,
   });
 }
@@ -48,9 +57,10 @@ abstract class GemmaEngine {
 /// themselves (Gemma or another chat model in `.litertlm`/`.task` form).
 ///
 /// Unlike the cloud adapters, this model has no first-class structured-output mode —
-/// [ProviderCapabilities.nativeJsonSchema] is false, so the pipeline's
-/// prompt-and-repair path carries the JSON contract instead. That is the same
-/// tolerant-parsing path already used for Ollama and LM Studio.
+/// `flutter_gemma` has nothing equivalent to an API's `response_format`/`responseSchema`
+/// parameter, so [ProviderCapabilities.nativeJsonSchema] is false and [structure] embeds
+/// the schema as text in the prompt itself, then leans on the pipeline's tolerant parse
+/// + repair loop to recover from whatever the model gets wrong.
 class GemmaStructuringProvider extends StructuringProvider {
   GemmaStructuringProvider({required GemmaEngine engine}) : _engine = engine;
 
@@ -101,9 +111,19 @@ class GemmaStructuringProvider extends StructuringProvider {
         'structuring started.',
       );
     }
+    // Unlike the HTTP adapters, there is no API-level schema parameter to attach this
+    // to — flutter_gemma has nothing equivalent to `response_format`/`responseSchema`.
+    // The system prompt says "the schema you have been given"; without this, it never
+    // actually was.
+    final systemPrompt = '${request.systemPrompt}\n\n'
+        'SCHEMA — the NoteDocument JSON Schema referenced above. Conform to it exactly: '
+        'every property it requires must be present, and no other properties may be '
+        'added.\n'
+        '${jsonEncode(renderSchema(request.schema, SchemaDialect.plain))}';
     final text = await _engine.generate(
-      systemPrompt: request.systemPrompt,
+      systemPrompt: systemPrompt,
       userContent: request.userContent,
+      priorTurns: request.priorTurns,
       maxOutputTokens: request.maxOutputTokens,
     );
     return StructureResponse(rawText: text, model: model.label);

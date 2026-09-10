@@ -479,7 +479,7 @@ class SettingsStore {
   String? get gemmaModelFamily => _prefs.getString(_kGemmaFamily);
 
   int get gemmaContextWindowTokens =>
-      _prefs.getInt(_kGemmaContextWindow) ?? 2048;
+      _prefs.getInt(_kGemmaContextWindow) ?? 8192;
 
   Future<void> setGemmaModel({
     required String fileName,

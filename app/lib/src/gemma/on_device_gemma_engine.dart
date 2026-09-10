@@ -48,7 +48,13 @@ class OnDeviceGemmaEngine implements GemmaEngine {
   Future<void> install({
     required String path,
     required GemmaFamily family,
-    int contextWindowTokens = 2048,
+    // The NoteDocument schema alone is ~2,400 tokens once rendered into the prompt (see
+    // GemmaStructuringProvider.structure) — bigger than a 2048 window on its own, before
+    // the system prompt, any transcript, or the output budget are even counted. 8192
+    // matches the pipeline's own "context unknown" fallback (StructuringPipeline.
+    // _windowBudget), which is the assumption this whole feature was actually built
+    // against.
+    int contextWindowTokens = 8192,
   }) async {
     final fileName = path.split('/').last;
     await FlutterGemma.installModel(
@@ -113,16 +119,24 @@ class OnDeviceGemmaEngine implements GemmaEngine {
   Future<String> generate({
     required String systemPrompt,
     required String userContent,
+    List<StructureTurn> priorTurns = const [],
     int maxOutputTokens = 2048,
   }) async {
     final model = await _activeModel();
     // A fresh chat per call: a recording's transcript is a one-shot structuring job,
     // not a conversation, and reusing a chat would leak one note's transcript into the
-    // next note's context.
+    // next note's context. priorTurns replays this attempt's own history (the repair
+    // loop's earlier answer and correction) onto that fresh chat — without it, a "retry"
+    // is just the same question asked again with no memory of what was wrong last time.
     final chat = await model.createChat(
       systemInstruction: systemPrompt,
       maxOutputTokens: maxOutputTokens,
     );
+    for (final turn in priorTurns) {
+      await chat.addQueryChunk(
+        Message.text(text: turn.content, isUser: turn.role == 'user'),
+      );
+    }
     await chat.addQueryChunk(Message.text(text: userContent, isUser: true));
     final response = await chat.generateChatResponse();
     return switch (response) {
