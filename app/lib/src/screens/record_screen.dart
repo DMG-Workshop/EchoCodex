@@ -656,34 +656,42 @@ class _ErrorPane extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.error_outline, size: 44, color: theme.colorScheme.error),
-        const SizedBox(height: 16),
-        Text(state.message,
-            textAlign: TextAlign.center, style: theme.textTheme.titleMedium),
-        if (state.remedy != null) ...[
-          const SizedBox(height: 10),
-          Text(
-            state.remedy!,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-        ],
-        if (state.recordingId != null) ...[
-          const SizedBox(height: 20),
-          FilledButton.tonal(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => NoteScreen(recordingId: state.recordingId!),
+    // A failure's remedy text is provider-supplied and can run to many lines (an
+    // on-device model's JSON-repair errors, for one) — scrollable so a long message
+    // never overflows the pane instead of just being cut off.
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 44, color: theme.colorScheme.error),
+            const SizedBox(height: 16),
+            Text(state.message,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium),
+            if (state.remedy != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                state.remedy!,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
-            ),
-            child: const Text('Open the transcript'),
-          ),
-        ],
-      ],
+            ],
+            if (state.recordingId != null) ...[
+              const SizedBox(height: 20),
+              FilledButton.tonal(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => NoteScreen(recordingId: state.recordingId!),
+                  ),
+                ),
+                child: const Text('Open the transcript'),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

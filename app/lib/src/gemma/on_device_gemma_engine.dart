@@ -93,6 +93,9 @@ class OnDeviceGemmaEngine implements GemmaEngine {
     );
   }
 
+  @override
+  int get contextWindowTokens => _settings.gemmaContextWindowTokens;
+
   InferenceModel? _model;
 
   Future<InferenceModel> _activeModel() async {
