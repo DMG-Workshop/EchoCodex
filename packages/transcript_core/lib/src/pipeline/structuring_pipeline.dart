@@ -371,10 +371,29 @@ class StructuringException implements Exception {
   final List<String> violations;
   final String? lastResponse;
 
+  /// Enough of the reply to tell silence from prose from malformed JSON, without pasting
+  /// a whole note into an error message.
+  static const int _excerpt = 300;
+
   @override
-  String toString() => violations.isEmpty
-      ? 'StructuringException: $message'
-      : 'StructuringException: $message\n${violations.join('\n')}';
+  String toString() {
+    final out = StringBuffer('StructuringException: $message');
+    if (violations.isNotEmpty) out.write('\n${violations.join('\n')}');
+
+    // What the model actually said is the one thing that distinguishes a model ignoring
+    // the schema from one that answered nothing at all, and it was being thrown away
+    // here — leaving "response did not contain a JSON object" with nothing to act on.
+    // Safe to show: this exception is caught and rendered in-app, never handed to the
+    // crash reporter, which is what feeds the shareable diagnostics bundle.
+    final reply = lastResponse?.trim();
+    if (reply != null) {
+      out.write('\n\nThe model replied: ');
+      out.write(reply.isEmpty
+          ? '(nothing at all)'
+          : '"${reply.length > _excerpt ? '${reply.substring(0, _excerpt)}…' : reply}"');
+    }
+    return out.toString();
+  }
 }
 
 /// One validated provider response, with what it cost to get there.
