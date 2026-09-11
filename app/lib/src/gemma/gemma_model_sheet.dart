@@ -38,20 +38,33 @@ class _GemmaModelSheetState extends State<_GemmaModelSheet> {
   String? _path;
   GemmaFamily _family = GemmaFamily.gemma4;
   bool _installing = false;
+  bool _picking = false;
   String? _error;
 
   Future<void> _pickFile() async {
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['litertlm'],
-      withData: false,
-    );
-    final path = picked?.files.singleOrNull?.path;
-    if (path == null || !mounted) return;
-    setState(() {
-      _path = path;
-      _error = null;
-    });
+    // The platform allows one picker at a time and answers a second call by
+    // throwing `already_active` — which a second tap before the sheet appears is
+    // enough to trigger, and which nothing here used to catch.
+    if (_picking) return;
+    setState(() => _picking = true);
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const ['litertlm'],
+        withData: false,
+      );
+      final path = picked?.files.singleOrNull?.path;
+      if (path == null || !mounted) return;
+      setState(() {
+        _path = path;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
   }
 
   Future<void> _install() async {
@@ -99,7 +112,7 @@ class _GemmaModelSheetState extends State<_GemmaModelSheet> {
             ),
             const SizedBox(height: 16),
             OutlinedButton.icon(
-              onPressed: _installing ? null : _pickFile,
+              onPressed: _installing || _picking ? null : _pickFile,
               icon: const Icon(Icons.folder_open_outlined, size: 18),
               label: Text(fileName ?? 'Choose a .litertlm file'),
             ),
