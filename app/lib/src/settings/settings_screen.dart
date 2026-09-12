@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transcript_core/transcript_core.dart';
 
@@ -645,6 +646,9 @@ class _ResultChip extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final good = result.ok;
     return Row(
+      // The summary is the error. Ellipsising it beside the button cut the useful half
+      // off ("Server is running but h…"), so it wraps instead and the row grows.
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(good ? Icons.check_circle : Icons.error_outline,
             size: 18, color: good ? scheme.primary : scheme.error),
@@ -653,7 +657,6 @@ class _ResultChip extends StatelessWidget {
           child: Text(
             result.summary,
             style: Theme.of(context).textTheme.bodyMedium,
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -668,51 +671,121 @@ class _ResultDetail extends StatelessWidget {
 
   final ConnectionResult result;
 
+  /// Whether the panel body below has anything to draw. Kept in step with what that
+  /// body actually renders — a lone model name is not shown there, so counting it here
+  /// would leave an empty panel with nothing but the icon in it.
+  bool get _hasExtra =>
+      result.detail != null ||
+      result.remedy != null ||
+      result.models.length > 1;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (result.detail == null &&
-        result.remedy == null &&
-        result.models.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    // A success with nothing to add stays quiet. A failure always gets a panel, even one
+    // carrying only its summary, so there is always somewhere to tap for the whole
+    // message — and something to copy it from, rather than retyping it off the screen.
+    if (result.ok && !_hasExtra) return const SizedBox.shrink();
+
+    final onPanel = result.ok
+        ? theme.colorScheme.onSurfaceVariant
+        : theme.colorScheme.onErrorContainer;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: result.ok
-              ? theme.colorScheme.surfaceContainerHighest
-              : theme.colorScheme.errorContainer,
+      child: Material(
+        color: result.ok
+            ? theme.colorScheme.surfaceContainerHighest
+            : theme.colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
           borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (result.remedy != null)
-              Text(result.remedy!, style: theme.textTheme.bodyMedium),
-            if (result.detail != null) ...[
-              if (result.remedy != null) const SizedBox(height: 8),
-              Text(
-                result.detail!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                  color: theme.colorScheme.onSurfaceVariant,
+          onTap: () => _showFullReport(context, result),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (result.remedy != null)
+                        Text(result.remedy!, style: theme.textTheme.bodyMedium),
+                      if (result.detail != null) ...[
+                        if (result.remedy != null) const SizedBox(height: 8),
+                        Text(
+                          result.detail!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      if (result.models.length > 1) ...[
+                        const SizedBox(height: 8),
+                        Text('Models: ${result.models.take(8).join(', ')}',
+                            style: theme.textTheme.bodySmall),
+                      ],
+                      if (!_hasExtra)
+                        Text('Tap for the full message.',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: onPanel)),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-            if (result.models.length > 1) ...[
-              const SizedBox(height: 8),
-              Text('Models: ${result.models.take(8).join(', ')}',
-                  style: theme.textTheme.bodySmall),
-            ],
-          ],
+                const SizedBox(width: 8),
+                Icon(Icons.info_outline, size: 18, color: onPanel),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
+}
+
+/// Everything the provider reported, as one block. Shared by the dialog and the copy
+/// button so what is read and what is pasted cannot drift apart.
+String connectionReport(ConnectionResult result) => [
+      result.summary,
+      if (result.remedy != null) result.remedy!,
+      if (result.detail != null) result.detail!,
+      if (result.models.isNotEmpty) 'Models: ${result.models.join(', ')}',
+    ].join('\n\n');
+
+/// The whole message, selectable and copyable — a connection failure is the thing users
+/// are most often asked to relay verbatim, and the panel truncates long ones.
+Future<void> _showFullReport(
+  BuildContext context,
+  ConnectionResult result,
+) async {
+  final report = connectionReport(result);
+  final messenger = ScaffoldMessenger.of(context);
+  await showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text(result.ok ? 'Connection details' : 'Connection failed'),
+      content: SingleChildScrollView(child: SelectableText(report)),
+      actions: [
+        TextButton(
+          onPressed: () async {
+            final navigator = Navigator.of(context);
+            await Clipboard.setData(ClipboardData(text: report));
+            navigator.pop();
+            messenger.showSnackBar(
+              const SnackBar(content: Text('Copied')),
+            );
+          },
+          child: const Text('Copy'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _CloudModelPicker extends StatelessWidget {
