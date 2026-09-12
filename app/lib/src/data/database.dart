@@ -179,6 +179,64 @@ class CodexNotes extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// The Gantt chart: the plan a person built by hand out of a recording.
+///
+/// Nothing reaches this table because a model found a date. A note's own dates are a
+/// suggestion — the chart is what someone decided to commit to, item by item, through
+/// a form they filled in. That is the whole reason this is a table rather than a flag
+/// on [Recordings.noteJson]: re-running the structuring stage rewrites the note and
+/// would silently rewrite the plan with it.
+///
+/// Scoped to its recording with a cascade, unlike [CodexNotes]: this chart is only ever
+/// reachable through the recording's own Gantt tab, so an entry that outlived the
+/// recording would be a row nobody could see or delete.
+@DataClassName('GanttEntry')
+class GanttEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get recordingId =>
+      text().references(Recordings, #id, onDelete: KeyAction.cascade)();
+
+  TextColumn get title => text()();
+
+  /// Inclusive start and finish. A milestone stores the same date in both, so the
+  /// zero-duration convention needs no special case anywhere downstream.
+  DateTimeColumn get startDate => dateTime()();
+  DateTimeColumn get endDate => dateTime()();
+
+  /// Who is doing it, and which phase or workstream it belongs to. Free text: no two
+  /// teams name their swimlanes the same way, and a picker would only be a worse
+  /// version of typing.
+  TextColumn get owner => text().nullable()();
+  TextColumn get workstream => text().nullable()();
+
+  /// 0-100, as reported. Never derived from the calendar — a bar whose dates have
+  /// passed is late, not finished.
+  IntColumn get percentComplete => integer().withDefault(const Constant(0))();
+
+  BoolColumn get milestone => boolean().withDefault(const Constant(false))();
+
+  /// Other [GanttEntries.id] values that must finish first, as a JSON array. A join
+  /// table would buy referential integrity the chart does not need: a dependency on an
+  /// entry that has since been deleted is simply not drawn.
+  TextColumn get dependsOnJson => text().nullable()();
+
+  /// 'explicit' or 'inferred', matching DateBasis. An entry the user placed from a
+  /// model's own guess without correcting it stays marked as inferred, because
+  /// accepting a prefilled form does not turn a guess into something that was said.
+  TextColumn get dateBasis =>
+      text().withDefault(const Constant('explicit'))();
+
+  /// The note task this was placed from, when it came from one, so the tray beside the
+  /// chart can stop offering work that is already on it.
+  TextColumn get sourceTaskId => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 enum ChunkState {
   pending,
   uploading,
@@ -200,6 +258,7 @@ enum ChunkState {
     ActionReminders,
     PrivacyAudits,
     CodexNotes,
+    GanttEntries,
   ],
 )
 class TranscriptDatabase extends _$TranscriptDatabase {
@@ -208,7 +267,7 @@ class TranscriptDatabase extends _$TranscriptDatabase {
   TranscriptDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -241,6 +300,9 @@ class TranscriptDatabase extends _$TranscriptDatabase {
           }
           if (from < 8) {
             await _seedSummaryPresets();
+          }
+          if (from < 9) {
+            await m.createTable(ganttEntries);
           }
         },
         beforeOpen: (details) async {

@@ -3130,6 +3130,720 @@ class CodexNotesCompanion extends UpdateCompanion<CodexNote> {
   }
 }
 
+class $GanttEntriesTable extends GanttEntries
+    with TableInfo<$GanttEntriesTable, GanttEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $GanttEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _recordingIdMeta =
+      const VerificationMeta('recordingId');
+  @override
+  late final GeneratedColumn<String> recordingId = GeneratedColumn<String>(
+      'recording_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES recordings (id) ON DELETE CASCADE'));
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+      'title', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _startDateMeta =
+      const VerificationMeta('startDate');
+  @override
+  late final GeneratedColumn<DateTime> startDate = GeneratedColumn<DateTime>(
+      'start_date', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _endDateMeta =
+      const VerificationMeta('endDate');
+  @override
+  late final GeneratedColumn<DateTime> endDate = GeneratedColumn<DateTime>(
+      'end_date', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _ownerMeta = const VerificationMeta('owner');
+  @override
+  late final GeneratedColumn<String> owner = GeneratedColumn<String>(
+      'owner', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _workstreamMeta =
+      const VerificationMeta('workstream');
+  @override
+  late final GeneratedColumn<String> workstream = GeneratedColumn<String>(
+      'workstream', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _percentCompleteMeta =
+      const VerificationMeta('percentComplete');
+  @override
+  late final GeneratedColumn<int> percentComplete = GeneratedColumn<int>(
+      'percent_complete', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _milestoneMeta =
+      const VerificationMeta('milestone');
+  @override
+  late final GeneratedColumn<bool> milestone = GeneratedColumn<bool>(
+      'milestone', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("milestone" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _dependsOnJsonMeta =
+      const VerificationMeta('dependsOnJson');
+  @override
+  late final GeneratedColumn<String> dependsOnJson = GeneratedColumn<String>(
+      'depends_on_json', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _dateBasisMeta =
+      const VerificationMeta('dateBasis');
+  @override
+  late final GeneratedColumn<String> dateBasis = GeneratedColumn<String>(
+      'date_basis', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('explicit'));
+  static const VerificationMeta _sourceTaskIdMeta =
+      const VerificationMeta('sourceTaskId');
+  @override
+  late final GeneratedColumn<String> sourceTaskId = GeneratedColumn<String>(
+      'source_task_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        recordingId,
+        title,
+        startDate,
+        endDate,
+        owner,
+        workstream,
+        percentComplete,
+        milestone,
+        dependsOnJson,
+        dateBasis,
+        sourceTaskId,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'gantt_entries';
+  @override
+  VerificationContext validateIntegrity(Insertable<GanttEntry> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('recording_id')) {
+      context.handle(
+          _recordingIdMeta,
+          recordingId.isAcceptableOrUnknown(
+              data['recording_id']!, _recordingIdMeta));
+    } else if (isInserting) {
+      context.missing(_recordingIdMeta);
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+          _titleMeta, title.isAcceptableOrUnknown(data['title']!, _titleMeta));
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('start_date')) {
+      context.handle(_startDateMeta,
+          startDate.isAcceptableOrUnknown(data['start_date']!, _startDateMeta));
+    } else if (isInserting) {
+      context.missing(_startDateMeta);
+    }
+    if (data.containsKey('end_date')) {
+      context.handle(_endDateMeta,
+          endDate.isAcceptableOrUnknown(data['end_date']!, _endDateMeta));
+    } else if (isInserting) {
+      context.missing(_endDateMeta);
+    }
+    if (data.containsKey('owner')) {
+      context.handle(
+          _ownerMeta, owner.isAcceptableOrUnknown(data['owner']!, _ownerMeta));
+    }
+    if (data.containsKey('workstream')) {
+      context.handle(
+          _workstreamMeta,
+          workstream.isAcceptableOrUnknown(
+              data['workstream']!, _workstreamMeta));
+    }
+    if (data.containsKey('percent_complete')) {
+      context.handle(
+          _percentCompleteMeta,
+          percentComplete.isAcceptableOrUnknown(
+              data['percent_complete']!, _percentCompleteMeta));
+    }
+    if (data.containsKey('milestone')) {
+      context.handle(_milestoneMeta,
+          milestone.isAcceptableOrUnknown(data['milestone']!, _milestoneMeta));
+    }
+    if (data.containsKey('depends_on_json')) {
+      context.handle(
+          _dependsOnJsonMeta,
+          dependsOnJson.isAcceptableOrUnknown(
+              data['depends_on_json']!, _dependsOnJsonMeta));
+    }
+    if (data.containsKey('date_basis')) {
+      context.handle(_dateBasisMeta,
+          dateBasis.isAcceptableOrUnknown(data['date_basis']!, _dateBasisMeta));
+    }
+    if (data.containsKey('source_task_id')) {
+      context.handle(
+          _sourceTaskIdMeta,
+          sourceTaskId.isAcceptableOrUnknown(
+              data['source_task_id']!, _sourceTaskIdMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  GanttEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return GanttEntry(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      recordingId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}recording_id'])!,
+      title: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
+      startDate: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}start_date'])!,
+      endDate: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}end_date'])!,
+      owner: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}owner']),
+      workstream: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}workstream']),
+      percentComplete: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}percent_complete'])!,
+      milestone: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}milestone'])!,
+      dependsOnJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}depends_on_json']),
+      dateBasis: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}date_basis'])!,
+      sourceTaskId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}source_task_id']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $GanttEntriesTable createAlias(String alias) {
+    return $GanttEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class GanttEntry extends DataClass implements Insertable<GanttEntry> {
+  final String id;
+  final String recordingId;
+  final String title;
+
+  /// Inclusive start and finish. A milestone stores the same date in both, so the
+  /// zero-duration convention needs no special case anywhere downstream.
+  final DateTime startDate;
+  final DateTime endDate;
+
+  /// Who is doing it, and which phase or workstream it belongs to. Free text: no two
+  /// teams name their swimlanes the same way, and a picker would only be a worse
+  /// version of typing.
+  final String? owner;
+  final String? workstream;
+
+  /// 0-100, as reported. Never derived from the calendar — a bar whose dates have
+  /// passed is late, not finished.
+  final int percentComplete;
+  final bool milestone;
+
+  /// Other [GanttEntries.id] values that must finish first, as a JSON array. A join
+  /// table would buy referential integrity the chart does not need: a dependency on an
+  /// entry that has since been deleted is simply not drawn.
+  final String? dependsOnJson;
+
+  /// 'explicit' or 'inferred', matching DateBasis. An entry the user placed from a
+  /// model's own guess without correcting it stays marked as inferred, because
+  /// accepting a prefilled form does not turn a guess into something that was said.
+  final String dateBasis;
+
+  /// The note task this was placed from, when it came from one, so the tray beside the
+  /// chart can stop offering work that is already on it.
+  final String? sourceTaskId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const GanttEntry(
+      {required this.id,
+      required this.recordingId,
+      required this.title,
+      required this.startDate,
+      required this.endDate,
+      this.owner,
+      this.workstream,
+      required this.percentComplete,
+      required this.milestone,
+      this.dependsOnJson,
+      required this.dateBasis,
+      this.sourceTaskId,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['recording_id'] = Variable<String>(recordingId);
+    map['title'] = Variable<String>(title);
+    map['start_date'] = Variable<DateTime>(startDate);
+    map['end_date'] = Variable<DateTime>(endDate);
+    if (!nullToAbsent || owner != null) {
+      map['owner'] = Variable<String>(owner);
+    }
+    if (!nullToAbsent || workstream != null) {
+      map['workstream'] = Variable<String>(workstream);
+    }
+    map['percent_complete'] = Variable<int>(percentComplete);
+    map['milestone'] = Variable<bool>(milestone);
+    if (!nullToAbsent || dependsOnJson != null) {
+      map['depends_on_json'] = Variable<String>(dependsOnJson);
+    }
+    map['date_basis'] = Variable<String>(dateBasis);
+    if (!nullToAbsent || sourceTaskId != null) {
+      map['source_task_id'] = Variable<String>(sourceTaskId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  GanttEntriesCompanion toCompanion(bool nullToAbsent) {
+    return GanttEntriesCompanion(
+      id: Value(id),
+      recordingId: Value(recordingId),
+      title: Value(title),
+      startDate: Value(startDate),
+      endDate: Value(endDate),
+      owner:
+          owner == null && nullToAbsent ? const Value.absent() : Value(owner),
+      workstream: workstream == null && nullToAbsent
+          ? const Value.absent()
+          : Value(workstream),
+      percentComplete: Value(percentComplete),
+      milestone: Value(milestone),
+      dependsOnJson: dependsOnJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dependsOnJson),
+      dateBasis: Value(dateBasis),
+      sourceTaskId: sourceTaskId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceTaskId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory GanttEntry.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return GanttEntry(
+      id: serializer.fromJson<String>(json['id']),
+      recordingId: serializer.fromJson<String>(json['recordingId']),
+      title: serializer.fromJson<String>(json['title']),
+      startDate: serializer.fromJson<DateTime>(json['startDate']),
+      endDate: serializer.fromJson<DateTime>(json['endDate']),
+      owner: serializer.fromJson<String?>(json['owner']),
+      workstream: serializer.fromJson<String?>(json['workstream']),
+      percentComplete: serializer.fromJson<int>(json['percentComplete']),
+      milestone: serializer.fromJson<bool>(json['milestone']),
+      dependsOnJson: serializer.fromJson<String?>(json['dependsOnJson']),
+      dateBasis: serializer.fromJson<String>(json['dateBasis']),
+      sourceTaskId: serializer.fromJson<String?>(json['sourceTaskId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'recordingId': serializer.toJson<String>(recordingId),
+      'title': serializer.toJson<String>(title),
+      'startDate': serializer.toJson<DateTime>(startDate),
+      'endDate': serializer.toJson<DateTime>(endDate),
+      'owner': serializer.toJson<String?>(owner),
+      'workstream': serializer.toJson<String?>(workstream),
+      'percentComplete': serializer.toJson<int>(percentComplete),
+      'milestone': serializer.toJson<bool>(milestone),
+      'dependsOnJson': serializer.toJson<String?>(dependsOnJson),
+      'dateBasis': serializer.toJson<String>(dateBasis),
+      'sourceTaskId': serializer.toJson<String?>(sourceTaskId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  GanttEntry copyWith(
+          {String? id,
+          String? recordingId,
+          String? title,
+          DateTime? startDate,
+          DateTime? endDate,
+          Value<String?> owner = const Value.absent(),
+          Value<String?> workstream = const Value.absent(),
+          int? percentComplete,
+          bool? milestone,
+          Value<String?> dependsOnJson = const Value.absent(),
+          String? dateBasis,
+          Value<String?> sourceTaskId = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      GanttEntry(
+        id: id ?? this.id,
+        recordingId: recordingId ?? this.recordingId,
+        title: title ?? this.title,
+        startDate: startDate ?? this.startDate,
+        endDate: endDate ?? this.endDate,
+        owner: owner.present ? owner.value : this.owner,
+        workstream: workstream.present ? workstream.value : this.workstream,
+        percentComplete: percentComplete ?? this.percentComplete,
+        milestone: milestone ?? this.milestone,
+        dependsOnJson:
+            dependsOnJson.present ? dependsOnJson.value : this.dependsOnJson,
+        dateBasis: dateBasis ?? this.dateBasis,
+        sourceTaskId:
+            sourceTaskId.present ? sourceTaskId.value : this.sourceTaskId,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  GanttEntry copyWithCompanion(GanttEntriesCompanion data) {
+    return GanttEntry(
+      id: data.id.present ? data.id.value : this.id,
+      recordingId:
+          data.recordingId.present ? data.recordingId.value : this.recordingId,
+      title: data.title.present ? data.title.value : this.title,
+      startDate: data.startDate.present ? data.startDate.value : this.startDate,
+      endDate: data.endDate.present ? data.endDate.value : this.endDate,
+      owner: data.owner.present ? data.owner.value : this.owner,
+      workstream:
+          data.workstream.present ? data.workstream.value : this.workstream,
+      percentComplete: data.percentComplete.present
+          ? data.percentComplete.value
+          : this.percentComplete,
+      milestone: data.milestone.present ? data.milestone.value : this.milestone,
+      dependsOnJson: data.dependsOnJson.present
+          ? data.dependsOnJson.value
+          : this.dependsOnJson,
+      dateBasis: data.dateBasis.present ? data.dateBasis.value : this.dateBasis,
+      sourceTaskId: data.sourceTaskId.present
+          ? data.sourceTaskId.value
+          : this.sourceTaskId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GanttEntry(')
+          ..write('id: $id, ')
+          ..write('recordingId: $recordingId, ')
+          ..write('title: $title, ')
+          ..write('startDate: $startDate, ')
+          ..write('endDate: $endDate, ')
+          ..write('owner: $owner, ')
+          ..write('workstream: $workstream, ')
+          ..write('percentComplete: $percentComplete, ')
+          ..write('milestone: $milestone, ')
+          ..write('dependsOnJson: $dependsOnJson, ')
+          ..write('dateBasis: $dateBasis, ')
+          ..write('sourceTaskId: $sourceTaskId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      recordingId,
+      title,
+      startDate,
+      endDate,
+      owner,
+      workstream,
+      percentComplete,
+      milestone,
+      dependsOnJson,
+      dateBasis,
+      sourceTaskId,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is GanttEntry &&
+          other.id == this.id &&
+          other.recordingId == this.recordingId &&
+          other.title == this.title &&
+          other.startDate == this.startDate &&
+          other.endDate == this.endDate &&
+          other.owner == this.owner &&
+          other.workstream == this.workstream &&
+          other.percentComplete == this.percentComplete &&
+          other.milestone == this.milestone &&
+          other.dependsOnJson == this.dependsOnJson &&
+          other.dateBasis == this.dateBasis &&
+          other.sourceTaskId == this.sourceTaskId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class GanttEntriesCompanion extends UpdateCompanion<GanttEntry> {
+  final Value<String> id;
+  final Value<String> recordingId;
+  final Value<String> title;
+  final Value<DateTime> startDate;
+  final Value<DateTime> endDate;
+  final Value<String?> owner;
+  final Value<String?> workstream;
+  final Value<int> percentComplete;
+  final Value<bool> milestone;
+  final Value<String?> dependsOnJson;
+  final Value<String> dateBasis;
+  final Value<String?> sourceTaskId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const GanttEntriesCompanion({
+    this.id = const Value.absent(),
+    this.recordingId = const Value.absent(),
+    this.title = const Value.absent(),
+    this.startDate = const Value.absent(),
+    this.endDate = const Value.absent(),
+    this.owner = const Value.absent(),
+    this.workstream = const Value.absent(),
+    this.percentComplete = const Value.absent(),
+    this.milestone = const Value.absent(),
+    this.dependsOnJson = const Value.absent(),
+    this.dateBasis = const Value.absent(),
+    this.sourceTaskId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  GanttEntriesCompanion.insert({
+    required String id,
+    required String recordingId,
+    required String title,
+    required DateTime startDate,
+    required DateTime endDate,
+    this.owner = const Value.absent(),
+    this.workstream = const Value.absent(),
+    this.percentComplete = const Value.absent(),
+    this.milestone = const Value.absent(),
+    this.dependsOnJson = const Value.absent(),
+    this.dateBasis = const Value.absent(),
+    this.sourceTaskId = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        recordingId = Value(recordingId),
+        title = Value(title),
+        startDate = Value(startDate),
+        endDate = Value(endDate),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<GanttEntry> custom({
+    Expression<String>? id,
+    Expression<String>? recordingId,
+    Expression<String>? title,
+    Expression<DateTime>? startDate,
+    Expression<DateTime>? endDate,
+    Expression<String>? owner,
+    Expression<String>? workstream,
+    Expression<int>? percentComplete,
+    Expression<bool>? milestone,
+    Expression<String>? dependsOnJson,
+    Expression<String>? dateBasis,
+    Expression<String>? sourceTaskId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (recordingId != null) 'recording_id': recordingId,
+      if (title != null) 'title': title,
+      if (startDate != null) 'start_date': startDate,
+      if (endDate != null) 'end_date': endDate,
+      if (owner != null) 'owner': owner,
+      if (workstream != null) 'workstream': workstream,
+      if (percentComplete != null) 'percent_complete': percentComplete,
+      if (milestone != null) 'milestone': milestone,
+      if (dependsOnJson != null) 'depends_on_json': dependsOnJson,
+      if (dateBasis != null) 'date_basis': dateBasis,
+      if (sourceTaskId != null) 'source_task_id': sourceTaskId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  GanttEntriesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? recordingId,
+      Value<String>? title,
+      Value<DateTime>? startDate,
+      Value<DateTime>? endDate,
+      Value<String?>? owner,
+      Value<String?>? workstream,
+      Value<int>? percentComplete,
+      Value<bool>? milestone,
+      Value<String?>? dependsOnJson,
+      Value<String>? dateBasis,
+      Value<String?>? sourceTaskId,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return GanttEntriesCompanion(
+      id: id ?? this.id,
+      recordingId: recordingId ?? this.recordingId,
+      title: title ?? this.title,
+      startDate: startDate ?? this.startDate,
+      endDate: endDate ?? this.endDate,
+      owner: owner ?? this.owner,
+      workstream: workstream ?? this.workstream,
+      percentComplete: percentComplete ?? this.percentComplete,
+      milestone: milestone ?? this.milestone,
+      dependsOnJson: dependsOnJson ?? this.dependsOnJson,
+      dateBasis: dateBasis ?? this.dateBasis,
+      sourceTaskId: sourceTaskId ?? this.sourceTaskId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (recordingId.present) {
+      map['recording_id'] = Variable<String>(recordingId.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (startDate.present) {
+      map['start_date'] = Variable<DateTime>(startDate.value);
+    }
+    if (endDate.present) {
+      map['end_date'] = Variable<DateTime>(endDate.value);
+    }
+    if (owner.present) {
+      map['owner'] = Variable<String>(owner.value);
+    }
+    if (workstream.present) {
+      map['workstream'] = Variable<String>(workstream.value);
+    }
+    if (percentComplete.present) {
+      map['percent_complete'] = Variable<int>(percentComplete.value);
+    }
+    if (milestone.present) {
+      map['milestone'] = Variable<bool>(milestone.value);
+    }
+    if (dependsOnJson.present) {
+      map['depends_on_json'] = Variable<String>(dependsOnJson.value);
+    }
+    if (dateBasis.present) {
+      map['date_basis'] = Variable<String>(dateBasis.value);
+    }
+    if (sourceTaskId.present) {
+      map['source_task_id'] = Variable<String>(sourceTaskId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('GanttEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('recordingId: $recordingId, ')
+          ..write('title: $title, ')
+          ..write('startDate: $startDate, ')
+          ..write('endDate: $endDate, ')
+          ..write('owner: $owner, ')
+          ..write('workstream: $workstream, ')
+          ..write('percentComplete: $percentComplete, ')
+          ..write('milestone: $milestone, ')
+          ..write('dependsOnJson: $dependsOnJson, ')
+          ..write('dateBasis: $dateBasis, ')
+          ..write('sourceTaskId: $sourceTaskId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$TranscriptDatabase extends GeneratedDatabase {
   _$TranscriptDatabase(QueryExecutor e) : super(e);
   $TranscriptDatabaseManager get managers => $TranscriptDatabaseManager(this);
@@ -3140,6 +3854,7 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
       $ActionRemindersTable(this);
   late final $PrivacyAuditsTable privacyAudits = $PrivacyAuditsTable(this);
   late final $CodexNotesTable codexNotes = $CodexNotesTable(this);
+  late final $GanttEntriesTable ganttEntries = $GanttEntriesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3150,7 +3865,8 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
         noteTemplates,
         actionReminders,
         privacyAudits,
-        codexNotes
+        codexNotes,
+        ganttEntries
       ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
@@ -3174,6 +3890,13 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
                 limitUpdateKind: UpdateKind.delete),
             result: [
               TableUpdate('codex_notes', kind: UpdateKind.update),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('recordings',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('gantt_entries', kind: UpdateKind.delete),
             ],
           ),
         ],
@@ -3273,6 +3996,20 @@ final class $$RecordingsTableReferences
         (f) => f.sourceRecordingId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_codexNotesRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$GanttEntriesTable, List<GanttEntry>>
+      _ganttEntriesRefsTable(_$TranscriptDatabase db) =>
+          MultiTypedResultKey.fromTable(db.ganttEntries,
+              aliasName: 'recordings__id__gantt_entries__recording_id');
+
+  $$GanttEntriesTableProcessedTableManager get ganttEntriesRefs {
+    final manager = $$GanttEntriesTableTableManager($_db, $_db.ganttEntries)
+        .filter((f) => f.recordingId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_ganttEntriesRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -3413,6 +4150,27 @@ class $$RecordingsTableFilterComposer
             $$CodexNotesTableFilterComposer(
               $db: $db,
               $table: $db.codexNotes,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> ganttEntriesRefs(
+      Expression<bool> Function($$GanttEntriesTableFilterComposer f) f) {
+    final $$GanttEntriesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.ganttEntries,
+        getReferencedColumn: (t) => t.recordingId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$GanttEntriesTableFilterComposer(
+              $db: $db,
+              $table: $db.ganttEntries,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -3639,6 +4397,27 @@ class $$RecordingsTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> ganttEntriesRefs<T extends Object>(
+      Expression<T> Function($$GanttEntriesTableAnnotationComposer a) f) {
+    final $$GanttEntriesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.ganttEntries,
+        getReferencedColumn: (t) => t.recordingId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$GanttEntriesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.ganttEntries,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$RecordingsTableTableManager extends RootTableManager<
@@ -3653,7 +4432,10 @@ class $$RecordingsTableTableManager extends RootTableManager<
     (Recording, $$RecordingsTableReferences),
     Recording,
     PrefetchHooks Function(
-        {bool chunksRefs, bool actionRemindersRefs, bool codexNotesRefs})> {
+        {bool chunksRefs,
+        bool actionRemindersRefs,
+        bool codexNotesRefs,
+        bool ganttEntriesRefs})> {
   $$RecordingsTableTableManager(_$TranscriptDatabase db, $RecordingsTable table)
       : super(TableManagerState(
           db: db,
@@ -3769,13 +4551,15 @@ class $$RecordingsTableTableManager extends RootTableManager<
           prefetchHooksCallback: (
               {chunksRefs = false,
               actionRemindersRefs = false,
-              codexNotesRefs = false}) {
+              codexNotesRefs = false,
+              ganttEntriesRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (chunksRefs) db.chunks,
                 if (actionRemindersRefs) db.actionReminders,
-                if (codexNotesRefs) db.codexNotes
+                if (codexNotesRefs) db.codexNotes,
+                if (ganttEntriesRefs) db.ganttEntries
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -3818,6 +4602,19 @@ class $$RecordingsTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem:
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.sourceRecordingId == item.id),
+                        typedResults: items),
+                  if (ganttEntriesRefs)
+                    await $_getPrefetchedData<Recording, $RecordingsTable,
+                            GanttEntry>(
+                        currentTable: table,
+                        referencedTable: $$RecordingsTableReferences
+                            ._ganttEntriesRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$RecordingsTableReferences(db, table, p0)
+                                .ganttEntriesRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.recordingId == item.id),
                         typedResults: items)
                 ];
               },
@@ -3838,7 +4635,10 @@ typedef $$RecordingsTableProcessedTableManager = ProcessedTableManager<
     (Recording, $$RecordingsTableReferences),
     Recording,
     PrefetchHooks Function(
-        {bool chunksRefs, bool actionRemindersRefs, bool codexNotesRefs})>;
+        {bool chunksRefs,
+        bool actionRemindersRefs,
+        bool codexNotesRefs,
+        bool ganttEntriesRefs})>;
 typedef $$ChunksTableCreateCompanionBuilder = ChunksCompanion Function({
   required String id,
   required String recordingId,
@@ -5195,6 +5995,420 @@ typedef $$CodexNotesTableProcessedTableManager = ProcessedTableManager<
     (CodexNote, $$CodexNotesTableReferences),
     CodexNote,
     PrefetchHooks Function({bool sourceRecordingId})>;
+typedef $$GanttEntriesTableCreateCompanionBuilder = GanttEntriesCompanion
+    Function({
+  required String id,
+  required String recordingId,
+  required String title,
+  required DateTime startDate,
+  required DateTime endDate,
+  Value<String?> owner,
+  Value<String?> workstream,
+  Value<int> percentComplete,
+  Value<bool> milestone,
+  Value<String?> dependsOnJson,
+  Value<String> dateBasis,
+  Value<String?> sourceTaskId,
+  required DateTime createdAt,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$GanttEntriesTableUpdateCompanionBuilder = GanttEntriesCompanion
+    Function({
+  Value<String> id,
+  Value<String> recordingId,
+  Value<String> title,
+  Value<DateTime> startDate,
+  Value<DateTime> endDate,
+  Value<String?> owner,
+  Value<String?> workstream,
+  Value<int> percentComplete,
+  Value<bool> milestone,
+  Value<String?> dependsOnJson,
+  Value<String> dateBasis,
+  Value<String?> sourceTaskId,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+final class $$GanttEntriesTableReferences extends BaseReferences<
+    _$TranscriptDatabase, $GanttEntriesTable, GanttEntry> {
+  $$GanttEntriesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $RecordingsTable _recordingIdTable(_$TranscriptDatabase db) =>
+      db.recordings.createAlias('gantt_entries__recording_id__recordings__id');
+
+  $$RecordingsTableProcessedTableManager get recordingId {
+    final $_column = $_itemColumn<String>('recording_id')!;
+
+    final manager = $$RecordingsTableTableManager($_db, $_db.recordings)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_recordingIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$GanttEntriesTableFilterComposer
+    extends Composer<_$TranscriptDatabase, $GanttEntriesTable> {
+  $$GanttEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get title => $composableBuilder(
+      column: $table.title, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get startDate => $composableBuilder(
+      column: $table.startDate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get endDate => $composableBuilder(
+      column: $table.endDate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get owner => $composableBuilder(
+      column: $table.owner, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get workstream => $composableBuilder(
+      column: $table.workstream, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get percentComplete => $composableBuilder(
+      column: $table.percentComplete,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get milestone => $composableBuilder(
+      column: $table.milestone, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get dependsOnJson => $composableBuilder(
+      column: $table.dependsOnJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get dateBasis => $composableBuilder(
+      column: $table.dateBasis, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sourceTaskId => $composableBuilder(
+      column: $table.sourceTaskId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  $$RecordingsTableFilterComposer get recordingId {
+    final $$RecordingsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableFilterComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$GanttEntriesTableOrderingComposer
+    extends Composer<_$TranscriptDatabase, $GanttEntriesTable> {
+  $$GanttEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get title => $composableBuilder(
+      column: $table.title, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get startDate => $composableBuilder(
+      column: $table.startDate, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get endDate => $composableBuilder(
+      column: $table.endDate, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get owner => $composableBuilder(
+      column: $table.owner, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get workstream => $composableBuilder(
+      column: $table.workstream, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get percentComplete => $composableBuilder(
+      column: $table.percentComplete,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get milestone => $composableBuilder(
+      column: $table.milestone, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get dependsOnJson => $composableBuilder(
+      column: $table.dependsOnJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get dateBasis => $composableBuilder(
+      column: $table.dateBasis, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sourceTaskId => $composableBuilder(
+      column: $table.sourceTaskId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  $$RecordingsTableOrderingComposer get recordingId {
+    final $$RecordingsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableOrderingComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$GanttEntriesTableAnnotationComposer
+    extends Composer<_$TranscriptDatabase, $GanttEntriesTable> {
+  $$GanttEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startDate =>
+      $composableBuilder(column: $table.startDate, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endDate =>
+      $composableBuilder(column: $table.endDate, builder: (column) => column);
+
+  GeneratedColumn<String> get owner =>
+      $composableBuilder(column: $table.owner, builder: (column) => column);
+
+  GeneratedColumn<String> get workstream => $composableBuilder(
+      column: $table.workstream, builder: (column) => column);
+
+  GeneratedColumn<int> get percentComplete => $composableBuilder(
+      column: $table.percentComplete, builder: (column) => column);
+
+  GeneratedColumn<bool> get milestone =>
+      $composableBuilder(column: $table.milestone, builder: (column) => column);
+
+  GeneratedColumn<String> get dependsOnJson => $composableBuilder(
+      column: $table.dependsOnJson, builder: (column) => column);
+
+  GeneratedColumn<String> get dateBasis =>
+      $composableBuilder(column: $table.dateBasis, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceTaskId => $composableBuilder(
+      column: $table.sourceTaskId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$RecordingsTableAnnotationComposer get recordingId {
+    final $$RecordingsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$GanttEntriesTableTableManager extends RootTableManager<
+    _$TranscriptDatabase,
+    $GanttEntriesTable,
+    GanttEntry,
+    $$GanttEntriesTableFilterComposer,
+    $$GanttEntriesTableOrderingComposer,
+    $$GanttEntriesTableAnnotationComposer,
+    $$GanttEntriesTableCreateCompanionBuilder,
+    $$GanttEntriesTableUpdateCompanionBuilder,
+    (GanttEntry, $$GanttEntriesTableReferences),
+    GanttEntry,
+    PrefetchHooks Function({bool recordingId})> {
+  $$GanttEntriesTableTableManager(
+      _$TranscriptDatabase db, $GanttEntriesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$GanttEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$GanttEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$GanttEntriesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> recordingId = const Value.absent(),
+            Value<String> title = const Value.absent(),
+            Value<DateTime> startDate = const Value.absent(),
+            Value<DateTime> endDate = const Value.absent(),
+            Value<String?> owner = const Value.absent(),
+            Value<String?> workstream = const Value.absent(),
+            Value<int> percentComplete = const Value.absent(),
+            Value<bool> milestone = const Value.absent(),
+            Value<String?> dependsOnJson = const Value.absent(),
+            Value<String> dateBasis = const Value.absent(),
+            Value<String?> sourceTaskId = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              GanttEntriesCompanion(
+            id: id,
+            recordingId: recordingId,
+            title: title,
+            startDate: startDate,
+            endDate: endDate,
+            owner: owner,
+            workstream: workstream,
+            percentComplete: percentComplete,
+            milestone: milestone,
+            dependsOnJson: dependsOnJson,
+            dateBasis: dateBasis,
+            sourceTaskId: sourceTaskId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String recordingId,
+            required String title,
+            required DateTime startDate,
+            required DateTime endDate,
+            Value<String?> owner = const Value.absent(),
+            Value<String?> workstream = const Value.absent(),
+            Value<int> percentComplete = const Value.absent(),
+            Value<bool> milestone = const Value.absent(),
+            Value<String?> dependsOnJson = const Value.absent(),
+            Value<String> dateBasis = const Value.absent(),
+            Value<String?> sourceTaskId = const Value.absent(),
+            required DateTime createdAt,
+            required DateTime updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              GanttEntriesCompanion.insert(
+            id: id,
+            recordingId: recordingId,
+            title: title,
+            startDate: startDate,
+            endDate: endDate,
+            owner: owner,
+            workstream: workstream,
+            percentComplete: percentComplete,
+            milestone: milestone,
+            dependsOnJson: dependsOnJson,
+            dateBasis: dateBasis,
+            sourceTaskId: sourceTaskId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable<$GanttEntriesTable, GanttEntry>(table),
+                    $$GanttEntriesTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({recordingId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (recordingId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.recordingId,
+                    referencedTable:
+                        $$GanttEntriesTableReferences._recordingIdTable(db),
+                    referencedColumn:
+                        $$GanttEntriesTableReferences._recordingIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$GanttEntriesTableProcessedTableManager = ProcessedTableManager<
+    _$TranscriptDatabase,
+    $GanttEntriesTable,
+    GanttEntry,
+    $$GanttEntriesTableFilterComposer,
+    $$GanttEntriesTableOrderingComposer,
+    $$GanttEntriesTableAnnotationComposer,
+    $$GanttEntriesTableCreateCompanionBuilder,
+    $$GanttEntriesTableUpdateCompanionBuilder,
+    (GanttEntry, $$GanttEntriesTableReferences),
+    GanttEntry,
+    PrefetchHooks Function({bool recordingId})>;
 
 class $TranscriptDatabaseManager {
   final _$TranscriptDatabase _db;
@@ -5211,4 +6425,6 @@ class $TranscriptDatabaseManager {
       $$PrivacyAuditsTableTableManager(_db, _db.privacyAudits);
   $$CodexNotesTableTableManager get codexNotes =>
       $$CodexNotesTableTableManager(_db, _db.codexNotes);
+  $$GanttEntriesTableTableManager get ganttEntries =>
+      $$GanttEntriesTableTableManager(_db, _db.ganttEntries);
 }

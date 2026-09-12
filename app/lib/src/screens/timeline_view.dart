@@ -2,15 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transcript_core/transcript_core.dart';
 
-import 'task_editor.dart';
+import '../data/database.dart' as db;
+import 'gantt_controller.dart';
+import 'gantt_entry_sheet.dart';
 
-/// The timeline, where `dateBasis` finally has to be visible.
+/// The Gantt chart, which the user builds rather than the app derives.
 ///
-/// A date someone spoke and a date the model derived are identical as values and must
-/// never be identical on screen: solid bars for what was said, hatched ghosts for what
-/// was inferred, and a tray beside the chart for work nobody dated at all. A Gantt that
-/// renders all three the same way is exactly the confident-looking fiction this app was
-/// designed not to produce.
+/// Nothing lands here because a model found a date in the recording. A note's dates are
+/// a suggestion; a plan is a set of commitments somebody made on purpose, one form at a
+/// time. So the chart starts empty and fills from the tray below it and the "add to
+/// Gantt" button beside each line of notes — the same deliberate gesture that puts a
+/// line in the Codex.
+///
+/// What the recording did establish is still carried, not discarded: a date someone
+/// spoke arrives prefilled, and a date the model worked out arrives prefilled *and*
+/// marked. `dateBasis` survives all the way onto the canvas, because a derived date and
+/// a spoken one are identical as values and must never be identical on screen.
 class TimelineView extends ConsumerStatefulWidget {
   const TimelineView({super.key, required this.recordingId, required this.note});
 
@@ -33,16 +40,48 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
         TimelineScale.month => 5,
       };
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final layout = const TimelinePlanner().plan(widget.note);
-
-    if (layout.isEmpty) {
-      return _EmptyTimeline(
-        undated: layout.undated,
+  Future<void> _open({db.GanttEntry? entry, NoteTask? task}) =>
+      openGanttEntrySheet(
+        context,
+        ref,
         recordingId: widget.recordingId,
         note: widget.note,
+        entry: entry,
+        task: task,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = ref.watch(ganttEntriesProvider(widget.recordingId));
+
+    return entries.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text('Could not open the chart.\n$e',
+              textAlign: TextAlign.center),
+        ),
+      ),
+      data: _chart,
+    );
+  }
+
+  Widget _chart(List<db.GanttEntry> entries) {
+    final theme = Theme.of(context);
+    final layout = const TimelinePlanner()
+        .planItems([for (final entry in entries) ganttItemOf(entry)]);
+    // Everything the recording produced that is not on the chart yet — the list the
+    // user checks off. Computed here rather than carried through the layout, because
+    // what is missing from a plan is a fact about this screen, not about the geometry.
+    final offChart = tasksNotOnChart(widget.note, entries);
+    final byId = {for (final entry in entries) entry.id: entry};
+
+    if (layout.isEmpty) {
+      return _EmptyChart(
+        offChart: offChart,
+        onAdd: () => _open(),
+        onAddTask: (task) => _open(task: task),
       );
     }
 
@@ -55,7 +94,16 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
           scale: _scale,
           inferredCount: layout.inferredCount,
           onChanged: (s) => setState(() => _scale = s),
+          onAdd: () => _open(),
         ),
+        if (layout.milestones.isNotEmpty)
+          _MilestoneStrip(
+            milestones: layout.milestones,
+            onTap: (id) {
+              final entry = byId[id];
+              if (entry != null) _open(entry: entry);
+            },
+          ),
         Expanded(
           child: SingleChildScrollView(
             child: Row(
@@ -71,15 +119,36 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
                       for (final bar in layout.bars)
                         SizedBox(
                           height: rowHeight,
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 16, right: 8),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                bar.title,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall,
+                          child: InkWell(
+                            onTap: () {
+                              final entry = byId[bar.taskId];
+                              if (entry != null) _open(entry: entry);
+                            },
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.only(left: 16, right: 8),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    bar.title,
+                                    maxLines: _subtitleOf(bar) == null ? 2 : 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall,
+                                  ),
+                                  if (_subtitleOf(bar) case final subtitle?)
+                                    Text(
+                                      subtitle,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.labelSmall
+                                          ?.copyWith(
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
@@ -109,14 +178,22 @@ class _TimelineViewState extends ConsumerState<TimelineView> {
             ),
           ),
         ),
-        if (layout.undated.isNotEmpty)
-          _UndatedTray(
-            tasks: layout.undated,
-            recordingId: widget.recordingId,
-            note: widget.note,
-          ),
+        if (offChart.isNotEmpty)
+          _OffChartTray(tasks: offChart, onTap: (task) => _open(task: task)),
       ],
     );
+  }
+
+  /// Owner and workstream under the name — the two columns every Gantt carries beside
+  /// its bars. Shown only because the form asks for them: a field the chart never
+  /// displays has no business being on the form.
+  static String? _subtitleOf(TimelineBar bar) {
+    final parts = [
+      if (bar.assigneeId case final owner? when owner.isNotEmpty) owner,
+      if (bar.epic case final epic? when epic.isNotEmpty) epic,
+      if (bar.percentComplete > 0) '${bar.percentComplete}%',
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 }
 
@@ -125,11 +202,13 @@ class _ScaleBar extends StatelessWidget {
     required this.scale,
     required this.inferredCount,
     required this.onChanged,
+    required this.onAdd,
   });
 
   final TimelineScale scale;
   final int inferredCount;
   final ValueChanged<TimelineScale> onChanged;
+  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -167,6 +246,11 @@ class _ScaleBar extends StatelessWidget {
                 ],
               ),
             ),
+          IconButton(
+            icon: const Icon(Icons.add_chart),
+            tooltip: 'Add to Gantt',
+            onPressed: onAdd,
+          ),
         ],
       ),
     );
@@ -292,7 +376,8 @@ class TimelinePainter extends CustomPainter {
 
       switch (bar.basis) {
         case DateBasis.explicit:
-          // Solid: somebody said this date out loud.
+          // Solid: this date is known — spoken in the recording, or chosen by the
+          // person who put it on the chart.
           canvas.drawRRect(rect, Paint()..color = scheme.primary);
         case DateBasis.inferred:
           // Hatched and outlined: derived from the recording, not stated.
@@ -312,7 +397,29 @@ class TimelinePainter extends CustomPainter {
           // Never drawn — an undated task has no honest position on a chart.
           break;
       }
+
+      _paintProgress(canvas, rect, bar);
     }
+  }
+
+  /// Reported progress, as a darker fill from the left edge of the bar.
+  ///
+  /// Deliberately clipped to the bar rather than drawn as a second bar beside it: the
+  /// claim being made is "this much of *this* work is done", and a separate shape
+  /// invites reading it as its own span of time.
+  void _paintProgress(Canvas canvas, RRect rect, TimelineBar bar) {
+    if (bar.percentComplete <= 0 || bar.basis == DateBasis.absent) return;
+    final fraction = (bar.percentComplete / 100).clamp(0.0, 1.0);
+    canvas.save();
+    canvas.clipRRect(rect);
+    canvas.drawRect(
+      Rect.fromLTWH(rect.left, rect.top, rect.width * fraction, rect.height),
+      Paint()
+        ..color = bar.basis == DateBasis.explicit
+            ? scheme.onPrimary.withValues(alpha: 0.45)
+            : scheme.tertiary.withValues(alpha: 0.45),
+    );
+    canvas.restore();
   }
 
   /// Diagonal hatching, clipped to the bar.
@@ -357,20 +464,19 @@ class TimelinePainter extends CustomPainter {
       old.scheme != scheme;
 }
 
-/// Work nobody dated, offered for the user to date themselves.
-class _UndatedTray extends ConsumerWidget {
-  const _UndatedTray({
-    required this.tasks,
-    required this.recordingId,
-    required this.note,
-  });
+/// Everything the recording produced that is not on the chart yet.
+///
+/// This is the list the user checks off. Tasks the note already dated appear here too:
+/// a date the model found is a suggestion, and the chart is for things somebody decided
+/// on. Tapping one opens the form with whatever is already known filled in.
+class _OffChartTray extends StatelessWidget {
+  const _OffChartTray({required this.tasks, required this.onTap});
 
   final List<NoteTask> tasks;
-  final String recordingId;
-  final NoteDocument note;
+  final ValueChanged<NoteTask> onTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
@@ -381,11 +487,11 @@ class _UndatedTray extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Needs dates', style: theme.textTheme.titleSmall),
+          Text('Not on the chart yet', style: theme.textTheme.titleSmall),
           const SizedBox(height: 2),
           Text(
-            'Nobody said when these were due, so nothing has been guessed. '
-            'Tap one to place it.',
+            'Nothing is placed for you and no dates have been guessed. '
+            'Tap one to put it on the chart.',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
@@ -396,15 +502,14 @@ class _UndatedTray extends ConsumerWidget {
             children: [
               for (final task in tasks)
                 ActionChip(
-                  avatar: const Icon(Icons.event_busy, size: 15),
-                  label: Text(task.title, overflow: TextOverflow.ellipsis),
-                  onPressed: () => openTaskEditor(
-                    context,
-                    ref,
-                    recordingId: recordingId,
-                    note: note,
-                    task: task,
+                  // Two icons, because the form behind them differs: one opens with
+                  // dates to confirm, the other with nothing but the name.
+                  avatar: Icon(
+                    task.isSchedulable ? Icons.event_available : Icons.event_busy,
+                    size: 15,
                   ),
+                  label: Text(task.title, overflow: TextOverflow.ellipsis),
+                  onPressed: () => onTap(task),
                 ),
             ],
           ),
@@ -414,51 +519,98 @@ class _UndatedTray extends ConsumerWidget {
   }
 }
 
-class _EmptyTimeline extends ConsumerWidget {
-  const _EmptyTimeline({
-    required this.undated,
-    required this.recordingId,
-    required this.note,
-  });
+/// Milestones sit on the axis rather than in the label column, so this strip is the
+/// only way to get back to one and change it.
+class _MilestoneStrip extends StatelessWidget {
+  const _MilestoneStrip({required this.milestones, required this.onTap});
 
-  final List<NoteTask> undated;
-  final String recordingId;
-  final NoteDocument note;
+  final List<TimelineMilestone> milestones;
+  final ValueChanged<String> onTap;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          for (final milestone in milestones)
+            if (milestone.id case final id?)
+              ActionChip(
+                visualDensity: VisualDensity.compact,
+                avatar: Icon(Icons.flag_outlined,
+                    size: 15, color: theme.colorScheme.error),
+                label: Text(milestone.label, overflow: TextOverflow.ellipsis),
+                onPressed: () => onTap(id),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the chart says before anything is on it.
+///
+/// Not an error and not a failure to load: an empty chart is the correct state for a
+/// plan nobody has built yet, and saying so is better than a blank canvas the user
+/// reads as broken.
+class _EmptyChart extends StatelessWidget {
+  const _EmptyChart({
+    required this.offChart,
+    required this.onAdd,
+    required this.onAddTask,
+  });
+
+  final List<NoteTask> offChart;
+  final VoidCallback onAdd;
+  final ValueChanged<NoteTask> onAddTask;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       children: [
         Expanded(
           child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.event_busy,
-                      size: 40, color: theme.colorScheme.onSurfaceVariant),
-                  const SizedBox(height: 14),
-                  Text('Nothing on the timeline yet',
-                      style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    undated.isEmpty
-                        ? 'No dates were discussed in this recording.'
-                        : 'No dates were discussed, so nothing has been placed. '
-                            'Date a task below and it will appear here.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add_chart,
+                        size: 40, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(height: 14),
+                    Text('Nothing on the chart yet',
+                        style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Text(
+                      offChart.isEmpty
+                          ? 'The chart is built by hand. Add an item and say when it '
+                              'runs, and it will appear here.'
+                          : 'The chart is built by hand — nothing from the recording '
+                              'is placed on it for you. Pick something below, or add '
+                              'an item of your own.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 18),
+                    FilledButton.icon(
+                      onPressed: onAdd,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Add an item'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
-        if (undated.isNotEmpty)
-          _UndatedTray(tasks: undated, recordingId: recordingId, note: note),
+        if (offChart.isNotEmpty)
+          _OffChartTray(tasks: offChart, onTap: onAddTask),
       ],
     );
   }

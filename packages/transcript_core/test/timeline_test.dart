@@ -227,6 +227,206 @@ void main() {
     });
   });
 
+  group('a chart the user built', () {
+    GanttItem item(
+      String id, {
+      required String start,
+      required String end,
+      bool milestone = false,
+      List<String> dependsOn = const [],
+      int percent = 0,
+      DateBasis basis = DateBasis.explicit,
+      String? title,
+    }) =>
+        GanttItem(
+          id: id,
+          title: title ?? 'Item $id',
+          start: DateTime.parse(start),
+          end: DateTime.parse(end),
+          isMilestone: milestone,
+          dependsOn: dependsOn,
+          percentComplete: percent,
+          basis: basis,
+        );
+
+    test('nothing is on the chart until something is put on it', () {
+      final layout = planner.planItems(const [], today: DateTime(2026, 9, 5));
+
+      expect(layout.isEmpty, isTrue);
+      expect(layout.bars, isEmpty);
+      expect(layout.totalDays, greaterThan(0),
+          reason: 'the axis still has to render');
+    });
+
+    test('a task the note dated is not on the chart until it is added', () {
+      final note = docWith(tasks: [task('a', due: '2026-09-18')]);
+
+      expect(planner.planItems(const []).bars, isEmpty,
+          reason: 'a date the model found is a suggestion, not a placement');
+      expect(planner.plan(note).bars, hasLength(1),
+          reason: 'the note-derived chart is still available to ask about');
+    });
+
+    test('an added item becomes a bar spanning its own dates', () {
+      final layout = planner
+          .planItems([item('a', start: '2026-09-10', end: '2026-09-18')]);
+
+      expect(layout.bars.single.taskId, 'a');
+      expect(layout.bars.single.durationDays, 9);
+      expect(layout.bars.single.basis, DateBasis.explicit,
+          reason: 'a date the user typed is known, not inferred');
+    });
+
+    test('a date carried over from a guess stays marked as a guess', () {
+      final layout = planner.planItems([
+        item('a',
+            start: '2026-09-10', end: '2026-09-18', basis: DateBasis.inferred),
+      ]);
+
+      expect(layout.inferredCount, 1,
+          reason:
+              'accepting a form does not turn a guess into something spoken');
+    });
+
+    test('a milestone is a marker on one date, never a bar', () {
+      final layout = planner.planItems([
+        item('launch', start: '2026-10-01', end: '2026-10-01', milestone: true),
+      ]);
+
+      expect(layout.bars, isEmpty);
+      expect(layout.milestones.single.label, 'Item launch');
+      expect(layout.milestones.single.id, 'launch',
+          reason: 'the user has to be able to edit the one they placed');
+      expect(layout.isEmpty, isFalse);
+    });
+
+    test('rows are dense, so no bar is drawn into a gap', () {
+      final layout = planner.planItems([
+        item('late', start: '2026-10-01', end: '2026-10-05'),
+        item('gate', start: '2026-09-20', end: '2026-09-20', milestone: true),
+        item('early', start: '2026-09-01', end: '2026-09-05'),
+      ]);
+
+      expect(layout.bars.map((b) => b.taskId), ['early', 'late']);
+      expect(layout.bars.map((b) => b.row), [0, 1]);
+      expect(layout.rowCount, layout.bars.length,
+          reason: 'a gap in the rows is a blank stripe and an off-by-one');
+    });
+
+    test('a finish before its start is a slip, not a negative bar', () {
+      final layout = planner
+          .planItems([item('a', start: '2026-09-20', end: '2026-09-18')]);
+
+      expect(layout.bars.single.start.isAfter(layout.bars.single.end), isFalse);
+      expect(layout.bars.single.durationDays, greaterThan(0));
+    });
+
+    test('progress is reported, never read off the calendar', () {
+      final layout = planner.planItems([
+        item('a', start: '2020-01-01', end: '2020-01-05', percent: 20),
+      ]);
+
+      expect(layout.bars.single.percentComplete, 20,
+          reason: 'a bar whose dates have passed is late, not finished');
+    });
+
+    test('progress outside 0-100 is clamped rather than drawn off the bar', () {
+      final layout = planner.planItems([
+        item('a', start: '2026-09-01', end: '2026-09-05', percent: 140),
+        item('b', start: '2026-09-06', end: '2026-09-08', percent: -10),
+      ]);
+
+      expect(layout.bars.map((b) => b.percentComplete), [100, 0]);
+    });
+
+    test('a dependency between two placed items becomes an arrow', () {
+      final layout = planner.planItems([
+        item('qa', start: '2026-09-01', end: '2026-09-10'),
+        item('rollout',
+            start: '2026-09-11', end: '2026-09-20', dependsOn: ['qa']),
+      ]);
+
+      expect(layout.links.single.fromTaskId, 'qa');
+      expect(layout.links.single.toTaskId, 'rollout');
+    });
+
+    test('a dependency on something not on the chart is dropped', () {
+      final layout = planner.planItems([
+        item('rollout',
+            start: '2026-09-11', end: '2026-09-20', dependsOn: ['never_added']),
+      ]);
+
+      expect(layout.links, isEmpty,
+          reason: 'an arrow pointing at nothing is worse than no arrow');
+    });
+
+    test('an item cannot depend on itself', () {
+      final layout = planner.planItems([
+        item('a', start: '2026-09-11', end: '2026-09-20', dependsOn: ['a']),
+      ]);
+
+      expect(layout.links, isEmpty);
+    });
+
+    test('undated work is passed through for the tray, never placed', () {
+      final note = docWith(tasks: [task('undated', basis: 'absent')]);
+      final layout = planner.planItems(
+        [item('a', start: '2026-09-01', end: '2026-09-05')],
+        undated: note.needsDates,
+      );
+
+      expect(layout.bars, hasLength(1));
+      expect(layout.undated.map((t) => t.id), ['undated']);
+    });
+
+    test('the range covers milestones as well as bars', () {
+      final layout = planner.planItems([
+        item('a', start: '2026-09-01', end: '2026-09-05'),
+        item('launch', start: '2026-10-01', end: '2026-10-01', milestone: true),
+      ]);
+
+      expect(layout.rangeEnd.isAfter(DateTime(2026, 10, 1)), isTrue);
+      expect(layout.rangeStart.isBefore(DateTime(2026, 9, 1)), isTrue);
+    });
+  });
+
+  group('filling the form in from a task', () {
+    test('a dated task offers its dates, owner and workstream', () {
+      final note = docWith(tasks: [
+        task('a', start: '2026-09-10', due: '2026-09-18', epic: 'Migration'),
+      ]);
+
+      final filled = planner.itemFromTask(note.tasks.single)!;
+
+      expect(filled.start, DateTime(2026, 9, 10));
+      expect(filled.end, DateTime(2026, 9, 18));
+      expect(filled.workstream, 'Migration');
+      expect(filled.basis, DateBasis.explicit);
+    });
+
+    test('a due date with no start offers a short item, not an invented span',
+        () {
+      final note = docWith(tasks: [task('a', due: '2026-09-18')]);
+
+      final filled = planner.itemFromTask(note.tasks.single)!;
+
+      expect(filled.durationDays, 1);
+      expect(filled.start, DateTime(2026, 9, 18));
+    });
+
+    test('a task with nothing usable offers nothing rather than today', () {
+      final note = docWith(tasks: [
+        task('absent', basis: 'absent'),
+        task('unparseable', due: 'next Thursday'),
+      ]);
+
+      for (final t in note.tasks) {
+        expect(planner.itemFromTask(t), isNull,
+            reason: 'an empty form beats a fabricated date');
+      }
+    });
+  });
+
   test('scales describe how much calendar a column covers', () {
     expect(TimelineScale.day.daysPerColumn, 1);
     expect(TimelineScale.week.daysPerColumn, 7);

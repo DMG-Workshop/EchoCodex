@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 
 import 'export_sheet.dart';
 import 'calendar_view.dart';
+import 'gantt_entry_sheet.dart';
 import 'timeline_view.dart';
 import 'record_screen.dart';
 
@@ -243,6 +244,29 @@ class _NotesTab extends ConsumerWidget {
                           );
                       messenger.showSnackBar(
                         const SnackBar(content: Text('Saved to Codex')),
+                      );
+                    },
+                  ),
+                  // Beside the Codex button and deliberately the same shape: both turn
+                  // a line of notes into something the user keeps, and neither happens
+                  // on its own. The chart asks for more than the Codex does only
+                  // because a bar cannot be drawn without dates.
+                  IconButton(
+                    icon: const Icon(Icons.add_chart, size: 20),
+                    tooltip: 'Add to Gantt',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final added = await openGanttEntrySheet(
+                        context,
+                        ref,
+                        recordingId: recording.id,
+                        note: note,
+                        initialTitle: bullet,
+                      );
+                      if (!added) return;
+                      messenger.showSnackBar(
+                        const SnackBar(content: Text('Added to the Gantt chart')),
                       );
                     },
                   ),
