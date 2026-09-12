@@ -166,6 +166,11 @@ class FakeRecordingRepository implements RecordingRepository {
       StreamController<List<db.CodexNote>>.broadcast();
   final List<String> deletedCodexNoteIds = [];
 
+  List<db.GanttEntry> _ganttEntries = [];
+  final StreamController<List<db.GanttEntry>> _ganttController =
+      StreamController<List<db.GanttEntry>>.broadcast();
+  final List<String> deletedGanttEntryIds = [];
+
   @override
   Future<void> delete(String id) async {
     deletedIds.add(id);
@@ -251,6 +256,80 @@ class FakeRecordingRepository implements RecordingRepository {
     deletedCodexNoteIds.add(id);
     _codexNotes = _codexNotes.where((n) => n.id != id).toList();
     _codexController.add(List.unmodifiable(_codexNotes));
+  }
+
+  // Same immediate-snapshot-then-live-updates shape again, so a test can add an item
+  // to the chart and watch it appear exactly as it would on a device.
+  @override
+  Stream<List<db.GanttEntry>> watchGanttEntries(String recordingId) async* {
+    yield _ganttFor(recordingId);
+    yield* _ganttController.stream.map((_) => _ganttFor(recordingId));
+  }
+
+  @override
+  Future<List<db.GanttEntry>> ganttEntries(String recordingId) async =>
+      _ganttFor(recordingId);
+
+  /// What is actually on the chart, for a test to assert against directly rather than
+  /// inferring it from pixels.
+  List<db.GanttEntry> ganttFor(String recordingId) => _ganttFor(recordingId);
+
+  List<db.GanttEntry> _ganttFor(String recordingId) {
+    final rows = <db.GanttEntry>[
+      for (final e in _ganttEntries)
+        if (e.recordingId == recordingId) e,
+    ]..sort((a, b) => a.startDate.compareTo(b.startDate));
+    return List.unmodifiable(rows);
+  }
+
+  @override
+  Future<String> saveGanttEntry({
+    required String recordingId,
+    required String title,
+    required DateTime startDate,
+    required DateTime endDate,
+    String? id,
+    String? owner,
+    String? workstream,
+    int percentComplete = 0,
+    bool milestone = false,
+    List<String> dependsOn = const [],
+    DateBasis dateBasis = DateBasis.explicit,
+    String? sourceTaskId,
+  }) async {
+    final now = DateTime.now();
+    final entryId = id ?? 'gantt_${_ganttEntries.length}_${now.microsecondsSinceEpoch}';
+    final from = startDate.isAfter(endDate) ? endDate : startDate;
+    final row = db.GanttEntry(
+      id: entryId,
+      recordingId: recordingId,
+      title: title,
+      startDate: milestone ? startDate : from,
+      endDate: milestone ? startDate : endDate,
+      owner: owner,
+      workstream: workstream,
+      percentComplete: percentComplete.clamp(0, 100),
+      milestone: milestone,
+      dependsOnJson: dependsOn.isEmpty ? null : jsonEncode(dependsOn),
+      dateBasis: dateBasis.name,
+      sourceTaskId: sourceTaskId,
+      createdAt: now,
+      updatedAt: now,
+    );
+    _ganttEntries = [
+      for (final e in _ganttEntries)
+        if (e.id != entryId) e,
+      row,
+    ];
+    _ganttController.add(List.unmodifiable(_ganttEntries));
+    return entryId;
+  }
+
+  @override
+  Future<void> deleteGanttEntry(String id) async {
+    deletedGanttEntryIds.add(id);
+    _ganttEntries = _ganttEntries.where((e) => e.id != id).toList();
+    _ganttController.add(List.unmodifiable(_ganttEntries));
   }
 
   @override

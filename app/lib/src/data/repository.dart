@@ -381,6 +381,90 @@ class RecordingRepository {
   Future<void> deleteCodexNote(String id) =>
       (_db.delete(_db.codexNotes)..where((n) => n.id.equals(id))).go();
 
+  // --- Gantt chart --------------------------------------------------
+  //
+  // Scoped to its recording and written only by hand: see GanttEntries in
+  // database.dart for why a model's dates never land here on their own.
+
+  Stream<List<GanttEntry>> watchGanttEntries(String recordingId) =>
+      (_db.select(_db.ganttEntries)
+            ..where((e) => e.recordingId.equals(recordingId))
+            ..orderBy([
+              (e) => OrderingTerm(expression: e.startDate),
+              (e) => OrderingTerm(expression: e.title),
+            ]))
+          .watch();
+
+  Future<List<GanttEntry>> ganttEntries(String recordingId) =>
+      (_db.select(_db.ganttEntries)
+            ..where((e) => e.recordingId.equals(recordingId))
+            ..orderBy([
+              (e) => OrderingTerm(expression: e.startDate),
+              (e) => OrderingTerm(expression: e.title),
+            ]))
+          .get();
+
+  /// Puts one item on the chart, or rewrites the one already there.
+  ///
+  /// [id] is supplied by the caller when editing and minted here otherwise, so an edit
+  /// can never quietly become a second bar for the same piece of work.
+  Future<String> saveGanttEntry({
+    required String recordingId,
+    required String title,
+    required DateTime startDate,
+    required DateTime endDate,
+    String? id,
+    String? owner,
+    String? workstream,
+    int percentComplete = 0,
+    bool milestone = false,
+    List<String> dependsOn = const [],
+    DateBasis dateBasis = DateBasis.explicit,
+    String? sourceTaskId,
+  }) async {
+    final now = DateTime.now();
+    // A finish before its start is rejected at the form, but storage should not depend
+    // on that: an inverted row would be a bar of negative length forever. A milestone
+    // collapses to a single date, so the zero-duration convention needs no special
+    // case anywhere downstream.
+    final from = startDate.isAfter(endDate) ? endDate : startDate;
+    final start = milestone ? startDate : from;
+    final end = milestone ? startDate : endDate;
+
+    final fields = GanttEntriesCompanion(
+      recordingId: Value(recordingId),
+      title: Value(title),
+      startDate: Value(start),
+      endDate: Value(end),
+      owner: Value(owner),
+      workstream: Value(workstream),
+      percentComplete: Value(percentComplete.clamp(0, 100)),
+      milestone: Value(milestone),
+      dependsOnJson: Value(dependsOn.isEmpty ? null : jsonEncode(dependsOn)),
+      dateBasis: Value(dateBasis.name),
+      sourceTaskId: Value(sourceTaskId),
+      updatedAt: Value(now),
+    );
+
+    // An edit rewrites the row in place and leaves createdAt alone: when the item was
+    // first committed to is part of the record, and an upsert would quietly reset it.
+    if (id != null) {
+      final rows = await (_db.update(_db.ganttEntries)
+            ..where((e) => e.id.equals(id)))
+          .write(fields);
+      if (rows > 0) return id;
+    }
+
+    final entryId = id ?? 'gantt_${now.microsecondsSinceEpoch}';
+    await _db.into(_db.ganttEntries).insert(
+          fields.copyWith(id: Value(entryId), createdAt: Value(now)),
+        );
+    return entryId;
+  }
+
+  Future<void> deleteGanttEntry(String id) =>
+      (_db.delete(_db.ganttEntries)..where((e) => e.id.equals(id))).go();
+
   Future<void> deleteSourceAudio(String id) async {
     final recording = await byId(id);
     final path = recording?.audioPath;
