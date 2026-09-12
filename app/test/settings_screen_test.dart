@@ -207,6 +207,70 @@ void main() {
         reason: 'on iOS a blocked request looks identical to a dead server');
   });
 
+  testWidgets('a long failure summary wraps instead of being cut off',
+      (tester) async {
+    await pumpSettings(tester, [
+      const TransportException(TransportFailure.refused, 'Connection refused'),
+    ]);
+
+    await tester.tap(find.text('Ollama'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Address'), 'http://192.168.1.50:11434');
+    await tester.tap(find.text('Test connection').last);
+    await tester.pumpAndSettle();
+
+    final summary = tester.widget<Text>(
+      find.textContaining('Nothing is listening'),
+    );
+    expect(summary.overflow, isNot(TextOverflow.ellipsis),
+        reason:
+            'truncating the summary hides the half that says what went wrong');
+  });
+
+  testWidgets('the failure panel opens the whole message, copyable',
+      (tester) async {
+    await pumpSettings(tester, [
+      const TransportException(TransportFailure.refused, 'Connection refused'),
+    ]);
+
+    await tester.tap(find.text('Ollama'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Address'), 'http://192.168.1.50:11434');
+    await tester.tap(find.text('Test connection').last);
+    await tester.pumpAndSettle();
+
+    // Tapping the panel itself, not its icon — the whole thing is the target, and
+    // Icons.info_outline appears elsewhere on this screen.
+    await tester.tap(find.textContaining('OLLAMA_HOST'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    final shown = tester.widget<SelectableText>(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(SelectableText),
+      ),
+    );
+    expect(shown.data, contains('Nothing is listening'),
+        reason: 'the dialog carries the summary, not just the remedy below it');
+    expect(shown.data, contains('OLLAMA_HOST'));
+    expect(find.text('Copy'), findsOneWidget);
+  });
+
+  test('the copyable report gathers every part the provider reported', () {
+    final report = connectionReport(ConnectionResult.failure(
+      summary: 'Server is running but has no models loaded',
+      remedy: 'Pull or load a model first, then test again.',
+      detail: 'GET /v1/models returned 200 with no data array',
+    ));
+
+    expect(report, contains('Server is running but has no models loaded'));
+    expect(report, contains('Pull or load a model first'));
+    expect(report, contains('GET /v1/models'));
+  });
+
   testWidgets('entering a key stores it and clears the field', (tester) async {
     final store = InMemoryKeyStore();
 
