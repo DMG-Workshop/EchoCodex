@@ -36,14 +36,15 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  // SharedPreferences has no change stream, so a section that persists a choice bumps
-  // this to rebuild the posture header from the freshly written store.
-  int _revision = 0;
-
   final _transcriptionSection = GlobalKey<_StageSectionState>();
   final _structuringSection = GlobalKey<_StageSectionState>();
 
-  void _onChanged() => setState(() => _revision++);
+  // SharedPreferences has no change stream, so a section that persists a choice asks for
+  // a rebuild — build() re-reads SettingsStore.posture, which is a live getter, so the
+  // header reflects the freshly written store. Nothing more than a rebuild is needed:
+  // this used to also bump a counter used as the ListView's key, which replaced the whole
+  // scrollable on every keystroke and sent the scroll position back to the top.
+  void _onChanged() => setState(() {});
 
   // Everything here autosaves already; this exists so a new user has a plain, explicit
   // action to press. It also covers the one field that does not autosave on every
@@ -74,7 +75,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('AI providers')),
       body: ListView(
-        key: ValueKey(_revision),
         padding: const EdgeInsets.symmetric(vertical: 8),
         children: [
           _PostureHeader(posture: settings.posture),

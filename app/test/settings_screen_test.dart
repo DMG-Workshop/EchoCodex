@@ -175,6 +175,24 @@ void main() {
     expect(find.textContaining('revoked'), findsOneWidget);
   });
 
+  testWidgets('choosing a provider does not tear the list down under you',
+      (tester) async {
+    await pumpSettings(tester, []);
+
+    // The ScrollPosition belongs to the list's element. Replacing the list — which a
+    // changing key does — throws this away along with wherever the user had scrolled to.
+    final before =
+        tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+
+    await tester.tap(find.text('Ollama'));
+    await tester.pumpAndSettle();
+
+    final after =
+        tester.state<ScrollableState>(find.byType(Scrollable).first).position;
+    expect(identical(after, before), isTrue,
+        reason: 'a rebuilt list snaps back to the top mid-edit');
+  });
+
   testWidgets('a local endpoint gets an address field, not a key field',
       (tester) async {
     await pumpSettings(tester, []);
