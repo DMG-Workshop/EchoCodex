@@ -44,3 +44,7 @@ export 'src/schema/dialects.dart';
 export 'src/schema/note_schema.dart';
 export 'src/schema/validator.dart';
 export 'src/timeline/timeline_layout.dart';
+export 'src/diagnostics/audio_health.dart';
+export 'src/diagnostics/debug_entry.dart';
+export 'src/diagnostics/debug_log.dart';
+export 'src/diagnostics/failure_kind.dart';

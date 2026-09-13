@@ -329,6 +329,7 @@ class SettingsStore {
   static const _kModelPrefix = 'provider.model.';
   static const _kEndpointPrefix = 'provider.endpoint.';
   static const _kOnboarded = 'onboarding.completed';
+  static const _kDebugMode = 'diagnostics.debugMode';
   static const _kRecordingsDir = 'recordings.dirPath';
   static const _kWorkflowPrefix = 'workflow.';
   static const _kTemplateId = 'workflow.templateId';
@@ -362,6 +363,17 @@ class SettingsStore {
   bool get hasOnboarded => _prefs.getBool(_kOnboarded) ?? false;
 
   Future<void> setOnboarded() => _prefs.setBool(_kOnboarded, true);
+
+  /// Whether the verbose diagnostic log is recording.
+  ///
+  /// Off by default and persisted, so a user who turned it on to chase an intermittent
+  /// failure still has it on after the relaunch that failure caused. Read once at
+  /// startup and pushed into the logger; never consulted from a logging call site,
+  /// which is the whole reason the flag is affordable on the audio path.
+  bool get debugMode => _prefs.getBool(_kDebugMode) ?? false;
+
+  Future<void> setDebugMode(bool enabled) =>
+      _prefs.setBool(_kDebugMode, enabled);
 
   ProviderKind? kindFor(ProviderStage stage) {
     final id = _prefs.getString(
