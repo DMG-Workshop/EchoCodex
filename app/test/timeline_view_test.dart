@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:echo_codex_app/src/recording/recording_controller.dart';
+import 'package:echo_codex_app/src/screens/board_view.dart';
+import 'package:echo_codex_app/src/screens/calendar_view.dart';
 import 'package:echo_codex_app/src/screens/export_sheet.dart';
 import 'package:echo_codex_app/src/screens/note_screen.dart';
 import 'package:echo_codex_app/src/settings/provider_config.dart';
@@ -266,6 +268,51 @@ void main() {
     expect(find.text('Not on the chart yet'), findsNothing,
         reason: 'an empty tray is a tray worth hiding');
     expect(tester.takeException(), isNull);
+  });
+
+  group('reaching the tabs on a tablet', () {
+    // The view is 1400px wide here, which is the layout a tablet gets.
+
+    testWidgets('every tab is reachable, not just the first', (tester) async {
+      await pumpNote(tester);
+
+      // The wide layout used to replace the whole TabBarView with a split pane,
+      // which left the tab bar rendered but inert: on a tablet every tab after
+      // the first did nothing at all when tapped. Asserting on the tab's own
+      // widget rather than on text, because the split pane already showed the
+      // notes and the chart — text from those is visible either way, and a test
+      // that passes on the broken layout is not a test.
+      expect(find.byType(BoardView), findsNothing,
+          reason: 'the tasks tab has not been opened yet');
+
+      await tester.tap(find.text('Tasks'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BoardView), findsOneWidget);
+
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CalendarView), findsOneWidget);
+    });
+
+    testWidgets('the tasks tab shows the board over the note\'s action items',
+        (tester) async {
+      await pumpNote(tester);
+
+      await tester.tap(find.text('Tasks'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('To do'), findsWidgets,
+          reason: 'the board columns are groupBy(status) over the same tasks');
+      expect(find.textContaining('Update the runbook'), findsWidgets);
+    });
+
+    testWidgets('the first tab still reads notes and plan side by side',
+        (tester) async {
+      await pumpNote(tester);
+
+      expect(find.byType(VerticalDivider), findsOneWidget,
+          reason: 'a wide screen has room for both, and that was worth keeping');
+    });
   });
 
   testWidgets('the add-to-Gantt button sits beside the Codex one on the notes',

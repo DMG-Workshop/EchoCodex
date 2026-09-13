@@ -11,6 +11,7 @@ import '../data/repository.dart';
 import '../recording/recording_controller.dart';
 import 'package:intl/intl.dart';
 
+import 'board_view.dart';
 import 'export_sheet.dart';
 import 'calendar_view.dart';
 import 'gantt_entry_sheet.dart';
@@ -88,7 +89,7 @@ class _NoteView extends ConsumerWidget {
     final note = decodeNote(recording);
 
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Scaffold(
         appBar: AppBar(
           title: Text(
@@ -119,6 +120,7 @@ class _NoteView extends ConsumerWidget {
             tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'Notes'),
+              Tab(text: 'Tasks'),
               Tab(text: 'Gantt'),
               Tab(text: 'Calendar'),
               Tab(text: 'Study'),
@@ -130,11 +132,18 @@ class _NoteView extends ConsumerWidget {
             ? const _NotStructuredYet()
             : LayoutBuilder(
                 builder: (context, constraints) {
-                  if (constraints.maxWidth >= 900) {
-                    return _TabletOverview(note: note, recording: recording);
-                  }
+                  // A wide screen has room to read the notes and the plan at once, so
+                  // the first tab becomes a split view there. Only the first: the wide
+                  // layout used to replace the whole TabBarView, which left the tab bar
+                  // rendered but inert — on a tablet, every tab after the first did
+                  // nothing at all when tapped.
+                  final wide = constraints.maxWidth >= 900;
                   return TabBarView(children: [
-                    _NotesTab(note: note, recording: recording),
+                    if (wide)
+                      _TabletOverview(note: note, recording: recording)
+                    else
+                      _NotesTab(note: note, recording: recording),
+                    BoardView(recordingId: recording.id, note: note),
                     TimelineView(recordingId: recording.id, note: note),
                     CalendarView(recordingId: recording.id, note: note),
                     _StudyTab(note: note),
