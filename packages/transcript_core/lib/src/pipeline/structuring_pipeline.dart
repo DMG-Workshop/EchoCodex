@@ -168,10 +168,7 @@ class StructuringPipeline {
       StructureProgress(completed: windows.length, total: windows.length + 1),
     );
 
-    final merged = await _structureValidated(
-      StructuringPrompts.reduce,
-      '<partial_documents>\n${jsonEncode(partials)}\n</partial_documents>',
-    );
+    final merged = await _reduce(partials);
 
     onProgress?.call(
       StructureProgress(
@@ -187,6 +184,107 @@ class StructuringPipeline {
       merged.model,
     );
   }
+
+  /// Merges the per-window documents into one, in as many rounds as it takes.
+  ///
+  /// The map phase is budgeted against the provider's context; for a long time the
+  /// reduce phase was not, and that asymmetry is what made long recordings fail. Every
+  /// partial is a whole NoteDocument — summary, sections, tasks, decisions, and a
+  /// verbatim source quote behind each one — so the reduce prompt grows with the length
+  /// of the recording. An hour of audio produces enough windows to overflow any context
+  /// the map phase was carefully kept inside, and the overflow surfaces as a model that
+  /// returns nothing parseable: "could not produce a valid note", with nothing pointing
+  /// at the real cause.
+  ///
+  /// So the merge is a tree, not a single call. Partials are grouped into batches that
+  /// fit the same budget a window gets, each batch is merged, and the merged documents
+  /// go round again until one is left. That costs more round trips on a long recording,
+  /// which is the correct trade against not finishing at all.
+  Future<_ValidatedStructure> _reduce(
+      List<Map<String, dynamic>> partials) async {
+    var level = partials;
+    var repairs = 0;
+    int? inputTokens;
+    int? outputTokens;
+
+    while (true) {
+      final batches = _batched(level, _windowBudget());
+
+      // Everything fits in one call, or grouping cannot make the set any smaller —
+      // a single partial already over budget, most likely. Either way this is the last
+      // round, and an oversized attempt beats refusing to produce anything.
+      if (batches.length <= 1 || batches.length >= level.length) {
+        final merged = await _structureValidated(
+          StructuringPrompts.reduce,
+          _partialsPrompt(level),
+        );
+        return _ValidatedStructure(
+          merged.raw,
+          repairs + merged.repairAttempts,
+          _add(inputTokens, merged.inputTokens),
+          _add(outputTokens, merged.outputTokens),
+          merged.model,
+        );
+      }
+
+      final next = <Map<String, dynamic>>[];
+      for (final batch in batches) {
+        // A batch of one has nothing to merge with; sending it through a reduce round
+        // would spend a request to rewrite a document that is already valid.
+        if (batch.length == 1) {
+          next.add(batch.single);
+          continue;
+        }
+        final merged = await _structureValidated(
+          StructuringPrompts.reduce,
+          _partialsPrompt(batch),
+        );
+        repairs += merged.repairAttempts;
+        inputTokens = _add(inputTokens, merged.inputTokens);
+        outputTokens = _add(outputTokens, merged.outputTokens);
+        next.add(merged.raw);
+      }
+
+      // Guaranteed progress: batches.length < level.length above, and every batch
+      // collapses to exactly one document, so this terminates.
+      level = next;
+    }
+  }
+
+  static String _partialsPrompt(List<Map<String, dynamic>> partials) =>
+      '<partial_documents>\n${jsonEncode(partials)}\n</partial_documents>';
+
+  /// Groups [partials] into consecutive batches that each fit [budgetTokens].
+  ///
+  /// Consecutive rather than best-fit: the documents are in recording order, and merging
+  /// neighbours keeps a conversation that spans a window boundary together. A partial
+  /// larger than the whole budget still gets a batch of its own rather than being
+  /// dropped — losing a window of the meeting to make the arithmetic work is not a
+  /// trade this pipeline makes.
+  static List<List<Map<String, dynamic>>> _batched(
+    List<Map<String, dynamic>> partials,
+    int budgetTokens,
+  ) {
+    final batches = <List<Map<String, dynamic>>>[];
+    var current = <Map<String, dynamic>>[];
+    var currentTokens = 0;
+
+    for (final partial in partials) {
+      final tokens = _jsonTokens(partial);
+      if (current.isNotEmpty && currentTokens + tokens > budgetTokens) {
+        batches.add(current);
+        current = <Map<String, dynamic>>[];
+        currentTokens = 0;
+      }
+      current.add(partial);
+      currentTokens += tokens;
+    }
+    if (current.isNotEmpty) batches.add(current);
+    return batches;
+  }
+
+  static int _jsonTokens(Object? value) =>
+      (jsonEncode(value).length / 3.5).ceil();
 
   /// One provider round trip, with tolerant parsing, validation and bounded repair.
   Future<_ValidatedStructure> _structureValidated(
@@ -253,7 +351,7 @@ class StructuringPipeline {
   /// the model's own output.
   int _windowBudget() {
     final window = provider.capabilities.contextWindowTokens;
-    final schemaTokens = (jsonEncode(schema).length / 3.5).ceil();
+    final schemaTokens = _jsonTokens(schema);
     final reserve = provider.capabilities.maxOutputTokens.clamp(2000, 16000);
     // Unknown context: assume something small enough to be safe on a local model.
     final usable = window == 0 ? 8192 : window;
@@ -333,7 +431,7 @@ class StructuringPipeline {
     final window = provider.capabilities.contextWindowTokens;
     if (window == 0) return false;
     const promptOverhead = 1200;
-    final schemaTokens = (jsonEncode(schema).length / 3.5).ceil();
+    final schemaTokens = _jsonTokens(schema);
     final reserve = provider.capabilities.maxOutputTokens.clamp(2000, 16000);
     return transcript.estimatedTokens +
             promptOverhead +

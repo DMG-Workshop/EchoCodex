@@ -205,6 +205,94 @@ void main() {
     expect(find.widgetWithText(TextField, 'API key'), findsNothing);
   });
 
+  group('choosing a model on a local server', () {
+    /// Ollama, reached and reporting what it has pulled.
+    Future<void> connectOllama(WidgetTester tester,
+        {List<String> models = const [
+          'llama3.1:8b-instruct-q5_K_M',
+          'qwen2.5:7b',
+          'nomic-embed-text',
+        ]}) async {
+      await pumpSettings(tester, [
+        HttpReply(
+          200,
+          jsonEncode({'data': [for (final m in models) {'id': m}]}),
+        ),
+      ]);
+
+      await tester.tap(find.text('Ollama'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Address'),
+          'http://192.168.1.50:11434');
+      await tester.tap(find.text('Test connection').last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('before testing, it says how to find out what is there',
+        (tester) async {
+      await pumpSettings(tester, []);
+      await tester.tap(find.text('Ollama'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Test the connection to list'), findsOneWidget,
+          reason: 'a local model name is not something anyone types from memory');
+
+      final button = tester.widget<IconButton>(
+          find.widgetWithIcon(IconButton, Icons.unfold_more));
+      expect(button.onPressed, isNull,
+          reason: 'nothing to choose from until the server has been asked');
+    });
+
+    testWidgets('after testing, the server\'s models can be chosen',
+        (tester) async {
+      await connectOllama(tester);
+
+      expect(find.textContaining('3 models on this server'), findsOneWidget);
+
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.unfold_more));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Models on this server'), findsOneWidget);
+      expect(find.text('llama3.1:8b-instruct-q5_K_M'), findsOneWidget);
+      expect(find.text('qwen2.5:7b'), findsOneWidget);
+    });
+
+    testWidgets('picking one fills the model field', (tester) async {
+      await connectOllama(tester);
+
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.unfold_more));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('qwen2.5:7b'));
+      await tester.pumpAndSettle();
+
+      final field =
+          tester.widget<TextField>(find.widgetWithText(TextField, 'Model'));
+      expect(field.controller?.text, 'qwen2.5:7b');
+    });
+
+    testWidgets('a model the server did not report is flagged, not blocked',
+        (tester) async {
+      await connectOllama(tester);
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Model'), 'mistral:latest');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('is not among the 3'), findsOneWidget);
+      final field =
+          tester.widget<TextField>(find.widgetWithText(TextField, 'Model'));
+      expect(field.controller?.text, 'mistral:latest',
+          reason: 'a list is an offer, not a whitelist — a model can be valid '
+              'before the server has loaded it');
+    });
+
+    testWidgets('a single model reads as one, not "1 models"', (tester) async {
+      await connectOllama(tester, models: const ['qwen2.5:7b']);
+
+      expect(find.textContaining('1 model on this server'), findsOneWidget);
+    });
+  });
+
   testWidgets('an unreachable local server explains the usual causes',
       (tester) async {
     await pumpSettings(tester, [
