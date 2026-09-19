@@ -37,7 +37,7 @@ class FakeModelStore implements ModelFileStore {
 }
 
 /// Serves a fixed body in ranges, honouring the Range header.
-class RangeServingTransport implements HttpTransport {
+class RangeServingTransport extends HttpTransport {
   RangeServingTransport(this.body,
       {this.ignoreRange = false, this.failFirst = 0});
 

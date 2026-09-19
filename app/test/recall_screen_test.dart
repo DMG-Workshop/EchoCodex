@@ -18,7 +18,7 @@ import 'fixtures.dart';
 /// Counting replies by hand is brittle here: how many passages a recording produces
 /// depends on the chunker's thresholds, and a mismatch shows up as an embedding error
 /// rather than as the thing under test.
-class EchoEmbeddingTransport implements HttpTransport {
+class EchoEmbeddingTransport extends HttpTransport {
   final List<HttpCall> calls = [];
 
   @override
