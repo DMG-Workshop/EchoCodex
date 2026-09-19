@@ -12,6 +12,7 @@ import '../settings/settings_screen.dart';
 import 'codex_screen.dart';
 import 'import_action.dart';
 import 'note_screen.dart';
+import 'recall_screen.dart';
 import 'record_screen.dart';
 import 'today_screen.dart';
 
@@ -48,6 +49,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             tooltip: 'Codex',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const CodexScreen()),
+            ),
+          ),
+          // Next to the search box it complements: the box finds the words
+          // someone used, this answers the question they half-remember.
+          IconButton(
+            icon: const Icon(Icons.travel_explore_outlined),
+            tooltip: 'Ask your recordings',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const RecallScreen()),
             ),
           ),
           IconButton(

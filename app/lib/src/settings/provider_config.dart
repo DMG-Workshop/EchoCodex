@@ -560,6 +560,17 @@ class SettingsStore {
     return vocabulary.isEmpty ? null : 'Custom vocabulary: $vocabulary';
   }
 
+  /// The embedding model to index recordings with, on whichever server already
+  /// writes the notes. Empty means recall is not set up.
+  ///
+  /// Only the model is asked for, not a whole provider: a chat model has no embedding
+  /// endpoint, so the name genuinely differs, but the endpoint does not.
+  String get embeddingModel =>
+      _prefs.getString('${_kWorkflowPrefix}embeddingModel') ?? '';
+
+  Future<void> setEmbeddingModel(String model) =>
+      _prefs.setString('${_kWorkflowPrefix}embeddingModel', model.trim());
+
   Future<void> setCustomVocabulary(String vocabulary) =>
       _prefs.setString('${_kWorkflowPrefix}vocabulary', vocabulary.trim());
 
