@@ -333,6 +333,32 @@ class FakeRecordingRepository implements RecordingRepository {
   }
 
   @override
+  Future<List<String>> knownSpeakerNames({int limit = 12}) async {
+    final seen = <String>{};
+    final out = <String>[];
+    final rows = List.of(_rows)
+      ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    for (final row in rows) {
+      final raw = row.speakerNamesJson;
+      if (raw == null || raw.isEmpty) continue;
+      Object? decoded;
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        continue;
+      }
+      if (decoded is! Map) continue;
+      for (final entry in decoded.entries) {
+        final name = '${entry.value}'.trim();
+        if (name.isEmpty || name == '${entry.key}') continue;
+        if (seen.add(name)) out.add(name);
+        if (out.length >= limit) return out;
+      }
+    }
+    return out;
+  }
+
+  @override
   Future<db.Recording?> byId(String id) async =>
       _rows.where((r) => r.id == id).firstOrNull;
 

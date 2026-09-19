@@ -162,6 +162,45 @@ class RecordingRepository {
         ),
       );
 
+  /// Names the user has given speakers in other recordings, most recent first.
+  ///
+  /// Diarization gives every recording its own labels — the same colleague is
+  /// SPEAKER_01 on Monday and SPEAKER_02 on Tuesday — so without this, naming starts
+  /// from nothing every time. These are offered as suggestions and never applied on
+  /// their own: matching a voice to a person is exactly the kind of confident guess
+  /// this app does not make, and misattributing a decision is worse than typing a name.
+  ///
+  /// A value still equal to its provider label is not a name, so it is skipped.
+  Future<List<String>> knownSpeakerNames({int limit = 12}) async {
+    final rows = await (_db.select(_db.recordings)
+          ..orderBy([(r) => OrderingTerm.desc(r.startedAt)]))
+        .get();
+
+    final seen = <String>{};
+    final out = <String>[];
+    for (final row in rows) {
+      final raw = row.speakerNamesJson;
+      if (raw == null || raw.isEmpty) continue;
+      Object? decoded;
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        // A row written by an older build, or corrupted. One recording's worth of
+        // names is not worth failing the whole lookup over.
+        continue;
+      }
+      if (decoded is! Map) continue;
+      for (final entry in decoded.entries) {
+        final label = '${entry.key}';
+        final name = '${entry.value}'.trim();
+        if (name.isEmpty || name == label) continue;
+        if (seen.add(name)) out.add(name);
+        if (out.length >= limit) return out;
+      }
+    }
+    return out;
+  }
+
   Future<void> saveSpeakerNames(
     String recordingId,
     Map<String, String> names,

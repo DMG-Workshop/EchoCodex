@@ -768,54 +768,20 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
         .toSet()
         .toList();
     if (labels.isEmpty) return;
-    final controllers = {
-      for (final label in labels)
-        label: TextEditingController(text: _speakerNames[label] ?? label),
-    };
+
+    // Read before opening: the dialog should already know who has been named
+    // before rather than popping suggestions in after it is on screen.
+    final known = await ref.read(repositoryProvider).knownSpeakerNames();
+    if (!mounted) return;
+
     final names = await showDialog<Map<String, String>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Name speakers'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final label in labels)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: TextField(
-                    controller: controllers[label],
-                    decoration: InputDecoration(labelText: label),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(
-              context,
-              {
-                for (final label in labels)
-                  label: controllers[label]!.text.trim().isEmpty
-                      ? label
-                      : controllers[label]!.text.trim(),
-              },
-            ),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (context) => _NameSpeakersDialog(
+        labels: labels,
+        current: _speakerNames,
+        knownNames: known,
       ),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      for (final controller in controllers.values) {
-        controller.dispose();
-      }
-    });
     if (names == null || !mounted) return;
     setState(() => _editedNames = names);
     await ref
@@ -1197,6 +1163,121 @@ class _Provenance extends StatelessWidget {
             ],
           ),
         ],
+      ],
+    );
+  }
+}
+
+
+/// Names the voices in one recording, offering whoever has been named before.
+///
+/// Diarization labels are per-recording, so the same person is SPEAKER_01 in one
+/// meeting and SPEAKER_02 in the next. The suggestions are what makes that bearable —
+/// but they are only suggestions. Nothing is matched to a voice automatically: the app
+/// has no idea whether this SPEAKER_01 is the same person as last week's, and guessing
+/// would attribute decisions to people who never made them.
+class _NameSpeakersDialog extends StatefulWidget {
+  const _NameSpeakersDialog({
+    required this.labels,
+    required this.current,
+    required this.knownNames,
+  });
+
+  final List<String> labels;
+  final Map<String, String> current;
+  final List<String> knownNames;
+
+  @override
+  State<_NameSpeakersDialog> createState() => _NameSpeakersDialogState();
+}
+
+class _NameSpeakersDialogState extends State<_NameSpeakersDialog> {
+  late final Map<String, TextEditingController> _controllers = {
+    for (final label in widget.labels)
+      label: TextEditingController(text: widget.current[label] ?? label),
+  };
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Names still worth offering for [label].
+  ///
+  /// Excludes names already given to another voice — one person cannot be two of the
+  /// speakers in the same conversation — and the name this voice already has, where
+  /// the chip would do nothing but take up room.
+  List<String> _availableFor(String label) {
+    final taken = {
+      for (final entry in _controllers.entries) entry.value.text.trim(),
+    };
+    return [
+      for (final name in widget.knownNames)
+        if (!taken.contains(name)) name,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Name speakers'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final label in widget.labels) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: TextField(
+                  controller: _controllers[label],
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(labelText: label),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              if (_availableFor(label).isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final name in _availableFor(label).take(6))
+                        ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          label: Text(name, style: theme.textTheme.labelMedium),
+                          onPressed: () => setState(() {
+                            _controllers[label]!.text = name;
+                          }),
+                        ),
+                    ],
+                  ),
+                )
+              else
+                const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, {
+            for (final label in widget.labels)
+              label: _controllers[label]!.text.trim().isEmpty
+                  ? label
+                  : _controllers[label]!.text.trim(),
+          }),
+          child: const Text('Save'),
+        ),
       ],
     );
   }
