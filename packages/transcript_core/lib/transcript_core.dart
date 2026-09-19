@@ -50,3 +50,4 @@ export 'src/diagnostics/debug_log.dart';
 export 'src/diagnostics/failure_kind.dart';
 export 'src/recall/recall_chunk.dart';
 export 'src/recall/recall_index.dart';
+export 'src/recall/embedding_provider.dart';
