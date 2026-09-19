@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
@@ -504,6 +505,120 @@ class RecordingRepository {
   Future<void> deleteGanttEntry(String id) =>
       (_db.delete(_db.ganttEntries)..where((e) => e.id.equals(id))).go();
 
+  // --- Recall index ---------------------------------------------------
+  //
+  // A derived cache. See RecallChunks in database.dart for why it is safe to drop
+  // wholesale when the embedding model changes.
+
+  /// Replaces everything indexed for one recording.
+  ///
+  /// Delete-then-insert rather than upsert: a re-index after the note is rewritten
+  /// produces a different number of passages, and leaving the old surplus behind means
+  /// answers citing text that is no longer in the note.
+  Future<void> saveRecallChunks(
+    String recordingId,
+    List<EmbeddedChunk> chunks, {
+    required String embeddingModel,
+  }) async {
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.delete(_db.recallChunks)
+            ..where((c) => c.recordingId.equals(recordingId)))
+          .go();
+      for (final entry in chunks) {
+        if (entry.vector.isEmpty) continue;
+        await _db.into(_db.recallChunks).insert(
+              RecallChunksCompanion.insert(
+                id: entry.chunk.id,
+                recordingId: recordingId,
+                kind: entry.chunk.kind.name,
+                body: entry.chunk.text,
+                startMs: Value(entry.chunk.source.startMs),
+                endMs: Value(entry.chunk.source.endMs),
+                vector: packVector(entry.vector),
+                dimensions: entry.vector.length,
+                embeddingModel: embeddingModel,
+                indexedAt: now,
+              ),
+            );
+      }
+    });
+  }
+
+  /// Everything indexed, for a linear scan.
+  ///
+  /// Rows whose width does not match [dimensions] are left out rather than returned
+  /// and skipped later: they cannot be compared, and handing them to the caller only
+  /// moves the same check somewhere less obvious.
+  Future<List<EmbeddedChunk>> recallCorpus({
+    required int dimensions,
+    required String embeddingModel,
+  }) async {
+    final rows = await (_db.select(_db.recallChunks)
+          ..where((c) =>
+              c.dimensions.equals(dimensions) &
+              c.embeddingModel.equals(embeddingModel)))
+        .get();
+    if (rows.isEmpty) return const [];
+
+    // One pass over the recordings so each passage can name the recording it came
+    // from without a query per row.
+    final titles = {
+      for (final recording in await all())
+        recording.id: (recording.title, recording.startedAt),
+    };
+
+    final out = <EmbeddedChunk>[];
+    for (final row in rows) {
+      final meta = titles[row.recordingId];
+      if (meta == null) continue;
+      out.add(EmbeddedChunk(
+        vector: unpackVector(row.vector),
+        chunk: RecallChunk(
+          id: row.id,
+          text: row.body,
+          kind: RecallKind.values
+                  .where((k) => k.name == row.kind)
+                  .firstOrNull ??
+              RecallKind.transcript,
+          source: RecallSource(
+            recordingId: row.recordingId,
+            recordingTitle:
+                meta.$1.isEmpty ? 'Untitled recording' : meta.$1,
+            recordedOn: _isoDay(meta.$2),
+            startMs: row.startMs,
+            endMs: row.endMs,
+          ),
+        ),
+      ));
+    }
+    return out;
+  }
+
+  /// How much is indexed, and how much is not — what the ask screen needs to say
+  /// whether an empty answer means "nothing was said about that" or "nothing has
+  /// been indexed yet".
+  Future<(int indexed, int total)> recallCoverage() async {
+    final recordings = await all();
+    final rows = await _db.select(_db.recallChunks).get();
+    final withChunks = {for (final row in rows) row.recordingId};
+    final eligible =
+        recordings.where((r) => r.transcriptText != null).toList();
+    return (
+      eligible.where((r) => withChunks.contains(r.id)).length,
+      eligible.length,
+    );
+  }
+
+  /// Drops the whole index. Cheap to rebuild and wrong to keep once the model that
+  /// produced it has changed.
+  Future<void> clearRecallIndex() => _db.delete(_db.recallChunks).go();
+
+  static String _isoDay(DateTime at) =>
+      '${at.year.toString().padLeft(4, '0')}-'
+      '${at.month.toString().padLeft(2, '0')}-'
+      '${at.day.toString().padLeft(2, '0')}';
+
   Future<void> deleteSourceAudio(String id) async {
     final recording = await byId(id);
     final path = recording?.audioPath;
@@ -555,4 +670,29 @@ NoteDocument? decodeNote(Recording recording) {
   return decoded is Map<String, dynamic>
       ? NoteDocument.fromJson(decoded)
       : null;
+}
+
+
+/// Packs a vector as little-endian float32.
+///
+/// float32 rather than float64 on purpose: embedding models emit float32 to begin
+/// with, cosine similarity over them is unaffected at this precision, and it halves a
+/// table that grows with every hour recorded.
+Uint8List packVector(List<double> vector) {
+  final floats = Float32List.fromList(vector);
+  return Uint8List.view(floats.buffer, 0, floats.lengthInBytes);
+}
+
+/// Reads back what [packVector] wrote.
+List<double> unpackVector(Uint8List bytes) {
+  // A view needs 4-byte alignment and a blob out of sqlite offers no such promise,
+  // so copy when the offset is not aligned rather than throwing on some rows only.
+  final aligned = bytes.offsetInBytes % 4 == 0
+      ? bytes
+      : Uint8List.fromList(bytes);
+  return Float32List.view(
+    aligned.buffer,
+    aligned.offsetInBytes,
+    aligned.lengthInBytes ~/ 4,
+  ).toList();
 }
