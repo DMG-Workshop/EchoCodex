@@ -42,6 +42,66 @@ class ScriptedProvider extends StructuringProvider {
   }
 }
 
+/// Behaves like a real local server: a prompt past the context window does not come
+/// back as a clean error, it comes back as nothing usable.
+///
+/// This is the shape of the failure the app was actually hitting on long recordings —
+/// "the model could not produce a valid note", with nothing pointing at the context.
+class ContextBoundProvider extends StructuringProvider {
+  ContextBoundProvider({
+    required this.reply,
+    this.contextWindowTokens = 8192,
+    this.maxOutputTokens = 2048,
+  });
+
+  final String reply;
+  final int contextWindowTokens;
+  final int maxOutputTokens;
+  final List<StructureRequest> requests = [];
+  final List<int> promptTokens = [];
+
+  /// Everything the provider is asked to read: prompt, transcript and prior turns.
+  int _tokensOf(StructureRequest r) {
+    final text = StringBuffer()
+      ..write(r.systemPrompt)
+      ..write(r.userContent);
+    for (final turn in r.priorTurns) {
+      text.write(turn.content);
+    }
+    return (text.length / 3.5).ceil() +
+        (jsonEncode(r.schema).length / 3.5).ceil();
+  }
+
+  @override
+  ProviderId get id => const ProviderId('bounded');
+  @override
+  String get displayName => 'Bounded';
+  @override
+  ProviderCapabilities get capabilities => ProviderCapabilities(
+        acceptsAudio: false,
+        acceptsText: true,
+        nativeJsonSchema: true,
+        contextWindowTokens: contextWindowTokens,
+        maxOutputTokens: maxOutputTokens,
+      );
+  @override
+  Future<ConnectionResult> test() async =>
+      ConnectionResult.success(summary: 'ok');
+
+  @override
+  Future<StructureResponse> structure(StructureRequest request) async {
+    requests.add(request);
+    final tokens = _tokensOf(request);
+    promptTokens.add(tokens);
+    if (tokens + maxOutputTokens > contextWindowTokens) {
+      return const StructureResponse(
+          rawText: '', inputTokens: 0, outputTokens: 0);
+    }
+    return StructureResponse(
+        rawText: reply, inputTokens: 100, outputTokens: 40);
+  }
+}
+
 void main() {
   Transcript longTranscript({int segments = 200}) => Transcript([
         for (var i = 0; i < segments; i++)
@@ -284,6 +344,120 @@ void main() {
       final outcome = await runLong(provider);
 
       expect(outcome.unverifiedQuotes, contains('t_invented'));
+    });
+  });
+
+  group('a long recording', () {
+    /// A window's worth of note, fat enough that a handful of them cannot share one
+    /// prompt — which is what every partial looks like after a real meeting.
+    String fatPartial() {
+      final note = validNoteJson();
+      final section =
+          (note['sections'] as List<dynamic>).first as Map<String, dynamic>;
+      section['bullets'] = [
+        for (var i = 0; i < 24; i++)
+          'A point that was made during this stretch of the meeting, number $i, '
+              'written out at the length a real bullet runs to.',
+      ];
+      return jsonEncode(note);
+    }
+
+    Future<StructureOutcome> run(StructuringProvider provider) =>
+        StructuringPipeline(provider: provider).run(
+          transcript: longTranscript(segments: 600),
+          referenceDate: '2026-09-05',
+          timeZone: 'UTC',
+          sttProviderName: 'Whisper',
+        );
+
+    test('finishes instead of overflowing the context at the merge', () async {
+      final provider = ContextBoundProvider(reply: fatPartial());
+
+      final outcome = await run(provider);
+
+      expect(outcome.document.sections, isNotEmpty,
+          reason:
+              'the map phase was always budgeted; the merge was not, and an '
+              'hour of audio produces enough partials to overflow it');
+      expect(
+        provider.promptTokens.every((t) => t + 2048 <= 8192),
+        isTrue,
+        reason: 'no request may exceed the window the map phase is kept inside',
+      );
+    });
+
+    test('merges in rounds rather than one oversized call', () async {
+      final provider = ContextBoundProvider(reply: fatPartial());
+
+      await run(provider);
+
+      final reduces = provider.requests
+          .where((r) => r.userContent.contains('<partial_documents>'))
+          .toList();
+      expect(reduces.length, greaterThan(1),
+          reason: 'one merge of every partial is the call that used to fail');
+      expect(reduces.last.userContent.contains('<partial_documents>'), isTrue);
+    });
+
+    test('every partial reaches the merge — none are dropped to fit', () async {
+      final provider = ContextBoundProvider(reply: fatPartial());
+
+      await run(provider);
+
+      final maps = provider.requests
+          .where((r) => r.userContent.contains('<transcript>'))
+          .length;
+      final mergedIn = provider.requests
+          .where((r) => r.userContent.contains('<partial_documents>'))
+          .map((r) => (jsonDecode(r.userContent
+                  .replaceAll('<partial_documents>', '')
+                  .replaceAll('</partial_documents>', '')
+                  .trim()) as List)
+              .length)
+          .fold<int>(0, (a, b) => a + b);
+
+      expect(mergedIn, greaterThanOrEqualTo(maps),
+          reason:
+              'losing a window of the meeting to make the arithmetic work is '
+              'not a trade this pipeline makes');
+    });
+
+    test('a short recording still merges in a single call', () async {
+      // Big enough that every partial fits one merge, small enough that the
+      // transcript still has to be split.
+      final provider = ScriptedProvider(
+        List.filled(30, jsonEncode(validNoteJson())),
+        contextWindowTokens: 20000,
+      );
+
+      await StructuringPipeline(provider: provider).run(
+        transcript: longTranscript(segments: 600),
+        referenceDate: '2026-09-05',
+        timeZone: 'UTC',
+        sttProviderName: 'Whisper',
+      );
+
+      final reduces = provider.requests
+          .where((r) => r.userContent.contains('<partial_documents>'))
+          .length;
+      expect(reduces, 1,
+          reason:
+              'the tree must not cost extra round trips when one call fits');
+    });
+
+    test('a single partial too big for any budget is still attempted',
+        () async {
+      // One window, one enormous partial: grouping cannot help, and refusing to
+      // produce anything is worse than one oversized try.
+      final provider = ContextBoundProvider(
+        reply: jsonEncode(validNoteJson()),
+        contextWindowTokens: 3000,
+        maxOutputTokens: 2000,
+      );
+
+      await expectLater(run(provider), throwsA(isA<StructuringException>()));
+      expect(provider.requests, isNotEmpty,
+          reason: 'it has to have tried, not refused up front');
     });
   });
 }

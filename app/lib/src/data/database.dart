@@ -237,6 +237,51 @@ class GanttEntries extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// The retrieval index: passages of a recording, with the vector that finds them.
+///
+/// A cache, not a record. Everything here is derived from a recording's transcript and
+/// note and can be rebuilt from them, which is what makes it safe to drop the whole
+/// table when the embedding model changes — and it must be dropped, because vectors of
+/// different widths cannot be compared and vectors from a different model cannot be
+/// compared meaningfully even at the same width.
+///
+/// Cascades with its recording. Unlike a Codex note there is nothing here a user would
+/// miss: a passage of a deleted recording is an index entry pointing at nothing.
+@DataClassName('RecallChunkRow')
+class RecallChunks extends Table {
+  /// Minted by RecallChunker as `<recordingId>:t3` or `<recordingId>:n12`, and stable
+  /// for the same input — so re-indexing replaces rather than duplicates.
+  TextColumn get id => text()();
+
+  TextColumn get recordingId =>
+      text().references(Recordings, #id, onDelete: KeyAction.cascade)();
+
+  /// A RecallKind name: transcript, summary, extract or codex.
+  TextColumn get kind => text()();
+
+  TextColumn get body => text()();
+
+  /// Where in the recording this was said. Null for note-derived passages that belong
+  /// to the recording rather than to a moment in it.
+  IntColumn get startMs => integer().nullable()();
+  IntColumn get endMs => integer().nullable()();
+
+  /// The vector, as little-endian float32. A blob rather than JSON: a 768-dimension
+  /// vector is 3KB here against roughly 9KB of decimal text, and a few thousand
+  /// passages make that the difference between a small file and a silly one.
+  BlobColumn get vector => blob()();
+
+  /// Stored so a mismatch is noticed rather than silently returning nothing. Changing
+  /// either invalidates every row.
+  IntColumn get dimensions => integer()();
+  TextColumn get embeddingModel => text()();
+
+  DateTimeColumn get indexedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 enum ChunkState {
   pending,
   uploading,
@@ -259,6 +304,7 @@ enum ChunkState {
     PrivacyAudits,
     CodexNotes,
     GanttEntries,
+    RecallChunks,
   ],
 )
 class TranscriptDatabase extends _$TranscriptDatabase {
@@ -267,7 +313,7 @@ class TranscriptDatabase extends _$TranscriptDatabase {
   TranscriptDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -303,6 +349,9 @@ class TranscriptDatabase extends _$TranscriptDatabase {
           }
           if (from < 9) {
             await m.createTable(ganttEntries);
+          }
+          if (from < 10) {
+            await m.createTable(recallChunks);
           }
         },
         beforeOpen: (details) async {

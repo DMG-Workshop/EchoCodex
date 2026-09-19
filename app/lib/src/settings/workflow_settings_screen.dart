@@ -23,11 +23,13 @@ class _WorkflowSettingsScreenState
   final _vocabularyController = TextEditingController();
   final _webhookController = TextEditingController();
   final _notionController = TextEditingController();
+  final _embeddingController = TextEditingController();
 
   @override
   void dispose() {
     _webhookController.dispose();
     _notionController.dispose();
+    _embeddingController.dispose();
     _languageController.dispose();
     _vocabularyController.dispose();
     super.dispose();
@@ -40,6 +42,10 @@ class _WorkflowSettingsScreenState
       text: store.transcriptionLanguage,
       selection:
           TextSelection.collapsed(offset: store.transcriptionLanguage.length),
+    );
+    _embeddingController.value = _embeddingController.value.copyWith(
+      text: store.embeddingModel,
+      selection: TextSelection.collapsed(offset: store.embeddingModel.length),
     );
     _vocabularyController.value = _vocabularyController.value.copyWith(
       text: store.customVocabulary,
@@ -328,10 +334,56 @@ class _WorkflowSettingsScreenState
                   'come through silent.'),
           const _MeetingCaptureNote(),
           const _SectionHeader('History and feedback'),
-          _toggle(store, 'searchableHistory', 'Searchable local history',
-              'Keep every dictation locally with raw and cleaned transcript text.'),
-          _toggle(store, 'liveProgress', 'Live progress',
-              'Show the rolling transcript and true recording-position progress.'),
+          _toggle(
+              store,
+              'searchableHistory',
+              'Search inside transcripts',
+              'Let the search box look through what was actually said, not just '
+                  'titles and the notes you kept. Off, transcripts stay on the '
+                  'device exactly as before — they are simply not searched.'),
+          const _SectionHeader('Local model performance'),
+          _toggle(
+              store,
+              'strictJsonSchema',
+              'Force the note\'s exact shape',
+              'Makes a local server constrain every word it writes to the note '
+                  'format, so the result is always valid. It is also most of the '
+                  'work: on a processor-only machine this is what makes writing '
+                  'notes take minutes. Turn it off to go much faster and let the '
+                  'app correct the model instead — worth trying if notes are slow '
+                  'or time out.'),
+          const _SectionHeader('Ask your recordings'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+            child: Text(
+              'Answering questions across every recording needs an embedding '
+              'model, which is a different model from the one that writes your '
+              'notes — a chat model has no embedding endpoint. It runs on the '
+              'same server you already pointed the app at.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: TextField(
+              controller: _embeddingController,
+              autocorrect: false,
+              decoration: const InputDecoration(
+                labelText: 'Embedding model',
+                hintText: 'nomic-embed-text',
+                helperText: 'Leave empty to keep this feature off.',
+              ),
+              onSubmitted: store.setEmbeddingModel,
+            ),
+          ),
+          const _SectionHeader('Planning'),
+          _toggle(
+              store,
+              'ganttChart',
+              'Gantt chart',
+              'A tab for scheduling a recording\'s work onto a timeline, and an '
+                  '"add to Gantt" button beside each line of notes. Off, both '
+                  'disappear — anything already on a chart is kept, not deleted.'),
           const _SectionHeader('Smart study aids'),
           _toggle(store, 'smartSummaries', 'Smart summaries and key concepts',
               'Generate a concise summary and the important concepts.'),

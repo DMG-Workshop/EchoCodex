@@ -178,12 +178,14 @@ class ProviderFactory {
     WhisperEngine? whisperEngine,
     GemmaEngine? gemmaEngine,
     LiveTranscriptionSource Function()? liveSource,
-  })  : _whisperEngine = whisperEngine ?? NativeWhisperEngine(),
+  })  : _settings = settings,
+        _whisperEngine = whisperEngine ?? NativeWhisperEngine(),
         _gemmaEngine = gemmaEngine ?? OnDeviceGemmaEngine(settings),
         _liveSource = liveSource ?? OnDeviceSpeechSource.new;
 
   final HttpTransport _transport;
   final KeyStore _keys;
+  final SettingsStore _settings;
   final WhisperEngine _whisperEngine;
   final GemmaEngine _gemmaEngine;
 
@@ -242,6 +244,7 @@ class ProviderFactory {
               ? LocalFlavor.ollama
               : LocalFlavor.lmStudio,
           apiKey: key,
+          strictSchema: _settings.workflowEnabled('strictJsonSchema'),
         ),
       ProviderKind.gemmaOnDevice =>
         GemmaStructuringProvider(engine: _gemmaEngine),
@@ -329,6 +332,7 @@ class SettingsStore {
   static const _kModelPrefix = 'provider.model.';
   static const _kEndpointPrefix = 'provider.endpoint.';
   static const _kOnboarded = 'onboarding.completed';
+  static const _kDebugMode = 'diagnostics.debugMode';
   static const _kRecordingsDir = 'recordings.dirPath';
   static const _kWorkflowPrefix = 'workflow.';
   static const _kTemplateId = 'workflow.templateId';
@@ -362,6 +366,17 @@ class SettingsStore {
   bool get hasOnboarded => _prefs.getBool(_kOnboarded) ?? false;
 
   Future<void> setOnboarded() => _prefs.setBool(_kOnboarded, true);
+
+  /// Whether the verbose diagnostic log is recording.
+  ///
+  /// Off by default and persisted, so a user who turned it on to chase an intermittent
+  /// failure still has it on after the relaunch that failure caused. Read once at
+  /// startup and pushed into the logger; never consulted from a logging call site,
+  /// which is the whole reason the flag is affordable on the audio path.
+  bool get debugMode => _prefs.getBool(_kDebugMode) ?? false;
+
+  Future<void> setDebugMode(bool enabled) =>
+      _prefs.setBool(_kDebugMode, enabled);
 
   ProviderKind? kindFor(ProviderStage stage) {
     final id = _prefs.getString(
@@ -535,6 +550,29 @@ class SettingsStore {
 
   String get customVocabulary =>
       _prefs.getString('${_kWorkflowPrefix}vocabulary') ?? '';
+
+  /// The spelling list to send with a recording, or null when it should not be sent.
+  ///
+  /// The switch and the value live together here because the decision is one thing:
+  /// asking callers to remember to check the switch is how the switch came to be
+  /// ignored at all three call sites in the first place, leaving it saying "off" while
+  /// the list carried on reaching the model.
+  String? get vocabularyContext {
+    if (!workflowEnabled('customVocabulary')) return null;
+    final vocabulary = customVocabulary;
+    return vocabulary.isEmpty ? null : 'Custom vocabulary: $vocabulary';
+  }
+
+  /// The embedding model to index recordings with, on whichever server already
+  /// writes the notes. Empty means recall is not set up.
+  ///
+  /// Only the model is asked for, not a whole provider: a chat model has no embedding
+  /// endpoint, so the name genuinely differs, but the endpoint does not.
+  String get embeddingModel =>
+      _prefs.getString('${_kWorkflowPrefix}embeddingModel') ?? '';
+
+  Future<void> setEmbeddingModel(String model) =>
+      _prefs.setString('${_kWorkflowPrefix}embeddingModel', model.trim());
 
   Future<void> setCustomVocabulary(String vocabulary) =>
       _prefs.setString('${_kWorkflowPrefix}vocabulary', vocabulary.trim());

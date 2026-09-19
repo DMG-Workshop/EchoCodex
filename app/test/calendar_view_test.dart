@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:echo_codex_app/src/recording/recording_controller.dart';
 import 'package:echo_codex_app/src/screens/note_screen.dart';
+import 'package:echo_codex_app/src/settings/provider_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
 
@@ -13,9 +15,14 @@ void main() {
     final row = recordingRow(
       overrideNote: note == null ? null : jsonEncode(note),
     );
+    // The note screen reads settings now: which tabs it shows depends on the
+    // workflow feature switches.
+    SharedPreferences.setMockInitialValues(const {});
+    final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
           recordingsProvider.overrideWith((ref) => Stream.value([row])),
         ],
         child: const MaterialApp(home: NoteScreen(recordingId: 'r_1')),

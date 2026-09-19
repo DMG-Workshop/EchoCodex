@@ -3844,6 +3844,535 @@ class GanttEntriesCompanion extends UpdateCompanion<GanttEntry> {
   }
 }
 
+class $RecallChunksTable extends RecallChunks
+    with TableInfo<$RecallChunksTable, RecallChunkRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RecallChunksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _recordingIdMeta =
+      const VerificationMeta('recordingId');
+  @override
+  late final GeneratedColumn<String> recordingId = GeneratedColumn<String>(
+      'recording_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES recordings (id) ON DELETE CASCADE'));
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+      'kind', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+      'body', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _startMsMeta =
+      const VerificationMeta('startMs');
+  @override
+  late final GeneratedColumn<int> startMs = GeneratedColumn<int>(
+      'start_ms', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _endMsMeta = const VerificationMeta('endMs');
+  @override
+  late final GeneratedColumn<int> endMs = GeneratedColumn<int>(
+      'end_ms', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _vectorMeta = const VerificationMeta('vector');
+  @override
+  late final GeneratedColumn<Uint8List> vector = GeneratedColumn<Uint8List>(
+      'vector', aliasedName, false,
+      type: DriftSqlType.blob, requiredDuringInsert: true);
+  static const VerificationMeta _dimensionsMeta =
+      const VerificationMeta('dimensions');
+  @override
+  late final GeneratedColumn<int> dimensions = GeneratedColumn<int>(
+      'dimensions', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _embeddingModelMeta =
+      const VerificationMeta('embeddingModel');
+  @override
+  late final GeneratedColumn<String> embeddingModel = GeneratedColumn<String>(
+      'embedding_model', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _indexedAtMeta =
+      const VerificationMeta('indexedAt');
+  @override
+  late final GeneratedColumn<DateTime> indexedAt = GeneratedColumn<DateTime>(
+      'indexed_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        recordingId,
+        kind,
+        body,
+        startMs,
+        endMs,
+        vector,
+        dimensions,
+        embeddingModel,
+        indexedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'recall_chunks';
+  @override
+  VerificationContext validateIntegrity(Insertable<RecallChunkRow> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('recording_id')) {
+      context.handle(
+          _recordingIdMeta,
+          recordingId.isAcceptableOrUnknown(
+              data['recording_id']!, _recordingIdMeta));
+    } else if (isInserting) {
+      context.missing(_recordingIdMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+          _kindMeta, kind.isAcceptableOrUnknown(data['kind']!, _kindMeta));
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+          _bodyMeta, body.isAcceptableOrUnknown(data['body']!, _bodyMeta));
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('start_ms')) {
+      context.handle(_startMsMeta,
+          startMs.isAcceptableOrUnknown(data['start_ms']!, _startMsMeta));
+    }
+    if (data.containsKey('end_ms')) {
+      context.handle(
+          _endMsMeta, endMs.isAcceptableOrUnknown(data['end_ms']!, _endMsMeta));
+    }
+    if (data.containsKey('vector')) {
+      context.handle(_vectorMeta,
+          vector.isAcceptableOrUnknown(data['vector']!, _vectorMeta));
+    } else if (isInserting) {
+      context.missing(_vectorMeta);
+    }
+    if (data.containsKey('dimensions')) {
+      context.handle(
+          _dimensionsMeta,
+          dimensions.isAcceptableOrUnknown(
+              data['dimensions']!, _dimensionsMeta));
+    } else if (isInserting) {
+      context.missing(_dimensionsMeta);
+    }
+    if (data.containsKey('embedding_model')) {
+      context.handle(
+          _embeddingModelMeta,
+          embeddingModel.isAcceptableOrUnknown(
+              data['embedding_model']!, _embeddingModelMeta));
+    } else if (isInserting) {
+      context.missing(_embeddingModelMeta);
+    }
+    if (data.containsKey('indexed_at')) {
+      context.handle(_indexedAtMeta,
+          indexedAt.isAcceptableOrUnknown(data['indexed_at']!, _indexedAtMeta));
+    } else if (isInserting) {
+      context.missing(_indexedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RecallChunkRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RecallChunkRow(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      recordingId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}recording_id'])!,
+      kind: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kind'])!,
+      body: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}body'])!,
+      startMs: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}start_ms']),
+      endMs: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}end_ms']),
+      vector: attachedDatabase.typeMapping
+          .read(DriftSqlType.blob, data['${effectivePrefix}vector'])!,
+      dimensions: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}dimensions'])!,
+      embeddingModel: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}embedding_model'])!,
+      indexedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}indexed_at'])!,
+    );
+  }
+
+  @override
+  $RecallChunksTable createAlias(String alias) {
+    return $RecallChunksTable(attachedDatabase, alias);
+  }
+}
+
+class RecallChunkRow extends DataClass implements Insertable<RecallChunkRow> {
+  /// Minted by RecallChunker as `<recordingId>:t3` or `<recordingId>:n12`, and stable
+  /// for the same input — so re-indexing replaces rather than duplicates.
+  final String id;
+  final String recordingId;
+
+  /// A RecallKind name: transcript, summary, extract or codex.
+  final String kind;
+  final String body;
+
+  /// Where in the recording this was said. Null for note-derived passages that belong
+  /// to the recording rather than to a moment in it.
+  final int? startMs;
+  final int? endMs;
+
+  /// The vector, as little-endian float32. A blob rather than JSON: a 768-dimension
+  /// vector is 3KB here against roughly 9KB of decimal text, and a few thousand
+  /// passages make that the difference between a small file and a silly one.
+  final Uint8List vector;
+
+  /// Stored so a mismatch is noticed rather than silently returning nothing. Changing
+  /// either invalidates every row.
+  final int dimensions;
+  final String embeddingModel;
+  final DateTime indexedAt;
+  const RecallChunkRow(
+      {required this.id,
+      required this.recordingId,
+      required this.kind,
+      required this.body,
+      this.startMs,
+      this.endMs,
+      required this.vector,
+      required this.dimensions,
+      required this.embeddingModel,
+      required this.indexedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['recording_id'] = Variable<String>(recordingId);
+    map['kind'] = Variable<String>(kind);
+    map['body'] = Variable<String>(body);
+    if (!nullToAbsent || startMs != null) {
+      map['start_ms'] = Variable<int>(startMs);
+    }
+    if (!nullToAbsent || endMs != null) {
+      map['end_ms'] = Variable<int>(endMs);
+    }
+    map['vector'] = Variable<Uint8List>(vector);
+    map['dimensions'] = Variable<int>(dimensions);
+    map['embedding_model'] = Variable<String>(embeddingModel);
+    map['indexed_at'] = Variable<DateTime>(indexedAt);
+    return map;
+  }
+
+  RecallChunksCompanion toCompanion(bool nullToAbsent) {
+    return RecallChunksCompanion(
+      id: Value(id),
+      recordingId: Value(recordingId),
+      kind: Value(kind),
+      body: Value(body),
+      startMs: startMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startMs),
+      endMs:
+          endMs == null && nullToAbsent ? const Value.absent() : Value(endMs),
+      vector: Value(vector),
+      dimensions: Value(dimensions),
+      embeddingModel: Value(embeddingModel),
+      indexedAt: Value(indexedAt),
+    );
+  }
+
+  factory RecallChunkRow.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RecallChunkRow(
+      id: serializer.fromJson<String>(json['id']),
+      recordingId: serializer.fromJson<String>(json['recordingId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      body: serializer.fromJson<String>(json['body']),
+      startMs: serializer.fromJson<int?>(json['startMs']),
+      endMs: serializer.fromJson<int?>(json['endMs']),
+      vector: serializer.fromJson<Uint8List>(json['vector']),
+      dimensions: serializer.fromJson<int>(json['dimensions']),
+      embeddingModel: serializer.fromJson<String>(json['embeddingModel']),
+      indexedAt: serializer.fromJson<DateTime>(json['indexedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'recordingId': serializer.toJson<String>(recordingId),
+      'kind': serializer.toJson<String>(kind),
+      'body': serializer.toJson<String>(body),
+      'startMs': serializer.toJson<int?>(startMs),
+      'endMs': serializer.toJson<int?>(endMs),
+      'vector': serializer.toJson<Uint8List>(vector),
+      'dimensions': serializer.toJson<int>(dimensions),
+      'embeddingModel': serializer.toJson<String>(embeddingModel),
+      'indexedAt': serializer.toJson<DateTime>(indexedAt),
+    };
+  }
+
+  RecallChunkRow copyWith(
+          {String? id,
+          String? recordingId,
+          String? kind,
+          String? body,
+          Value<int?> startMs = const Value.absent(),
+          Value<int?> endMs = const Value.absent(),
+          Uint8List? vector,
+          int? dimensions,
+          String? embeddingModel,
+          DateTime? indexedAt}) =>
+      RecallChunkRow(
+        id: id ?? this.id,
+        recordingId: recordingId ?? this.recordingId,
+        kind: kind ?? this.kind,
+        body: body ?? this.body,
+        startMs: startMs.present ? startMs.value : this.startMs,
+        endMs: endMs.present ? endMs.value : this.endMs,
+        vector: vector ?? this.vector,
+        dimensions: dimensions ?? this.dimensions,
+        embeddingModel: embeddingModel ?? this.embeddingModel,
+        indexedAt: indexedAt ?? this.indexedAt,
+      );
+  RecallChunkRow copyWithCompanion(RecallChunksCompanion data) {
+    return RecallChunkRow(
+      id: data.id.present ? data.id.value : this.id,
+      recordingId:
+          data.recordingId.present ? data.recordingId.value : this.recordingId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      body: data.body.present ? data.body.value : this.body,
+      startMs: data.startMs.present ? data.startMs.value : this.startMs,
+      endMs: data.endMs.present ? data.endMs.value : this.endMs,
+      vector: data.vector.present ? data.vector.value : this.vector,
+      dimensions:
+          data.dimensions.present ? data.dimensions.value : this.dimensions,
+      embeddingModel: data.embeddingModel.present
+          ? data.embeddingModel.value
+          : this.embeddingModel,
+      indexedAt: data.indexedAt.present ? data.indexedAt.value : this.indexedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecallChunkRow(')
+          ..write('id: $id, ')
+          ..write('recordingId: $recordingId, ')
+          ..write('kind: $kind, ')
+          ..write('body: $body, ')
+          ..write('startMs: $startMs, ')
+          ..write('endMs: $endMs, ')
+          ..write('vector: $vector, ')
+          ..write('dimensions: $dimensions, ')
+          ..write('embeddingModel: $embeddingModel, ')
+          ..write('indexedAt: $indexedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, recordingId, kind, body, startMs, endMs,
+      $driftBlobEquality.hash(vector), dimensions, embeddingModel, indexedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RecallChunkRow &&
+          other.id == this.id &&
+          other.recordingId == this.recordingId &&
+          other.kind == this.kind &&
+          other.body == this.body &&
+          other.startMs == this.startMs &&
+          other.endMs == this.endMs &&
+          $driftBlobEquality.equals(other.vector, this.vector) &&
+          other.dimensions == this.dimensions &&
+          other.embeddingModel == this.embeddingModel &&
+          other.indexedAt == this.indexedAt);
+}
+
+class RecallChunksCompanion extends UpdateCompanion<RecallChunkRow> {
+  final Value<String> id;
+  final Value<String> recordingId;
+  final Value<String> kind;
+  final Value<String> body;
+  final Value<int?> startMs;
+  final Value<int?> endMs;
+  final Value<Uint8List> vector;
+  final Value<int> dimensions;
+  final Value<String> embeddingModel;
+  final Value<DateTime> indexedAt;
+  final Value<int> rowid;
+  const RecallChunksCompanion({
+    this.id = const Value.absent(),
+    this.recordingId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.body = const Value.absent(),
+    this.startMs = const Value.absent(),
+    this.endMs = const Value.absent(),
+    this.vector = const Value.absent(),
+    this.dimensions = const Value.absent(),
+    this.embeddingModel = const Value.absent(),
+    this.indexedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RecallChunksCompanion.insert({
+    required String id,
+    required String recordingId,
+    required String kind,
+    required String body,
+    this.startMs = const Value.absent(),
+    this.endMs = const Value.absent(),
+    required Uint8List vector,
+    required int dimensions,
+    required String embeddingModel,
+    required DateTime indexedAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        recordingId = Value(recordingId),
+        kind = Value(kind),
+        body = Value(body),
+        vector = Value(vector),
+        dimensions = Value(dimensions),
+        embeddingModel = Value(embeddingModel),
+        indexedAt = Value(indexedAt);
+  static Insertable<RecallChunkRow> custom({
+    Expression<String>? id,
+    Expression<String>? recordingId,
+    Expression<String>? kind,
+    Expression<String>? body,
+    Expression<int>? startMs,
+    Expression<int>? endMs,
+    Expression<Uint8List>? vector,
+    Expression<int>? dimensions,
+    Expression<String>? embeddingModel,
+    Expression<DateTime>? indexedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (recordingId != null) 'recording_id': recordingId,
+      if (kind != null) 'kind': kind,
+      if (body != null) 'body': body,
+      if (startMs != null) 'start_ms': startMs,
+      if (endMs != null) 'end_ms': endMs,
+      if (vector != null) 'vector': vector,
+      if (dimensions != null) 'dimensions': dimensions,
+      if (embeddingModel != null) 'embedding_model': embeddingModel,
+      if (indexedAt != null) 'indexed_at': indexedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RecallChunksCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? recordingId,
+      Value<String>? kind,
+      Value<String>? body,
+      Value<int?>? startMs,
+      Value<int?>? endMs,
+      Value<Uint8List>? vector,
+      Value<int>? dimensions,
+      Value<String>? embeddingModel,
+      Value<DateTime>? indexedAt,
+      Value<int>? rowid}) {
+    return RecallChunksCompanion(
+      id: id ?? this.id,
+      recordingId: recordingId ?? this.recordingId,
+      kind: kind ?? this.kind,
+      body: body ?? this.body,
+      startMs: startMs ?? this.startMs,
+      endMs: endMs ?? this.endMs,
+      vector: vector ?? this.vector,
+      dimensions: dimensions ?? this.dimensions,
+      embeddingModel: embeddingModel ?? this.embeddingModel,
+      indexedAt: indexedAt ?? this.indexedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (recordingId.present) {
+      map['recording_id'] = Variable<String>(recordingId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (startMs.present) {
+      map['start_ms'] = Variable<int>(startMs.value);
+    }
+    if (endMs.present) {
+      map['end_ms'] = Variable<int>(endMs.value);
+    }
+    if (vector.present) {
+      map['vector'] = Variable<Uint8List>(vector.value);
+    }
+    if (dimensions.present) {
+      map['dimensions'] = Variable<int>(dimensions.value);
+    }
+    if (embeddingModel.present) {
+      map['embedding_model'] = Variable<String>(embeddingModel.value);
+    }
+    if (indexedAt.present) {
+      map['indexed_at'] = Variable<DateTime>(indexedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecallChunksCompanion(')
+          ..write('id: $id, ')
+          ..write('recordingId: $recordingId, ')
+          ..write('kind: $kind, ')
+          ..write('body: $body, ')
+          ..write('startMs: $startMs, ')
+          ..write('endMs: $endMs, ')
+          ..write('vector: $vector, ')
+          ..write('dimensions: $dimensions, ')
+          ..write('embeddingModel: $embeddingModel, ')
+          ..write('indexedAt: $indexedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$TranscriptDatabase extends GeneratedDatabase {
   _$TranscriptDatabase(QueryExecutor e) : super(e);
   $TranscriptDatabaseManager get managers => $TranscriptDatabaseManager(this);
@@ -3855,6 +4384,7 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
   late final $PrivacyAuditsTable privacyAudits = $PrivacyAuditsTable(this);
   late final $CodexNotesTable codexNotes = $CodexNotesTable(this);
   late final $GanttEntriesTable ganttEntries = $GanttEntriesTable(this);
+  late final $RecallChunksTable recallChunks = $RecallChunksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3866,7 +4396,8 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
         actionReminders,
         privacyAudits,
         codexNotes,
-        ganttEntries
+        ganttEntries,
+        recallChunks
       ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
@@ -3897,6 +4428,13 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
                 limitUpdateKind: UpdateKind.delete),
             result: [
               TableUpdate('gantt_entries', kind: UpdateKind.delete),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('recordings',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('recall_chunks', kind: UpdateKind.delete),
             ],
           ),
         ],
@@ -4010,6 +4548,20 @@ final class $$RecordingsTableReferences
         .filter((f) => f.recordingId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_ganttEntriesRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$RecallChunksTable, List<RecallChunkRow>>
+      _recallChunksRefsTable(_$TranscriptDatabase db) =>
+          MultiTypedResultKey.fromTable(db.recallChunks,
+              aliasName: 'recordings__id__recall_chunks__recording_id');
+
+  $$RecallChunksTableProcessedTableManager get recallChunksRefs {
+    final manager = $$RecallChunksTableTableManager($_db, $_db.recallChunks)
+        .filter((f) => f.recordingId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_recallChunksRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -4171,6 +4723,27 @@ class $$RecordingsTableFilterComposer
             $$GanttEntriesTableFilterComposer(
               $db: $db,
               $table: $db.ganttEntries,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> recallChunksRefs(
+      Expression<bool> Function($$RecallChunksTableFilterComposer f) f) {
+    final $$RecallChunksTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.recallChunks,
+        getReferencedColumn: (t) => t.recordingId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecallChunksTableFilterComposer(
+              $db: $db,
+              $table: $db.recallChunks,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -4418,6 +4991,27 @@ class $$RecordingsTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> recallChunksRefs<T extends Object>(
+      Expression<T> Function($$RecallChunksTableAnnotationComposer a) f) {
+    final $$RecallChunksTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.recallChunks,
+        getReferencedColumn: (t) => t.recordingId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecallChunksTableAnnotationComposer(
+              $db: $db,
+              $table: $db.recallChunks,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$RecordingsTableTableManager extends RootTableManager<
@@ -4435,7 +5029,8 @@ class $$RecordingsTableTableManager extends RootTableManager<
         {bool chunksRefs,
         bool actionRemindersRefs,
         bool codexNotesRefs,
-        bool ganttEntriesRefs})> {
+        bool ganttEntriesRefs,
+        bool recallChunksRefs})> {
   $$RecordingsTableTableManager(_$TranscriptDatabase db, $RecordingsTable table)
       : super(TableManagerState(
           db: db,
@@ -4552,14 +5147,16 @@ class $$RecordingsTableTableManager extends RootTableManager<
               {chunksRefs = false,
               actionRemindersRefs = false,
               codexNotesRefs = false,
-              ganttEntriesRefs = false}) {
+              ganttEntriesRefs = false,
+              recallChunksRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (chunksRefs) db.chunks,
                 if (actionRemindersRefs) db.actionReminders,
                 if (codexNotesRefs) db.codexNotes,
-                if (ganttEntriesRefs) db.ganttEntries
+                if (ganttEntriesRefs) db.ganttEntries,
+                if (recallChunksRefs) db.recallChunks
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -4615,6 +5212,19 @@ class $$RecordingsTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem:
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.recordingId == item.id),
+                        typedResults: items),
+                  if (recallChunksRefs)
+                    await $_getPrefetchedData<Recording, $RecordingsTable,
+                            RecallChunkRow>(
+                        currentTable: table,
+                        referencedTable: $$RecordingsTableReferences
+                            ._recallChunksRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$RecordingsTableReferences(db, table, p0)
+                                .recallChunksRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.recordingId == item.id),
                         typedResults: items)
                 ];
               },
@@ -4638,7 +5248,8 @@ typedef $$RecordingsTableProcessedTableManager = ProcessedTableManager<
         {bool chunksRefs,
         bool actionRemindersRefs,
         bool codexNotesRefs,
-        bool ganttEntriesRefs})>;
+        bool ganttEntriesRefs,
+        bool recallChunksRefs})>;
 typedef $$ChunksTableCreateCompanionBuilder = ChunksCompanion Function({
   required String id,
   required String recordingId,
@@ -6409,6 +7020,358 @@ typedef $$GanttEntriesTableProcessedTableManager = ProcessedTableManager<
     (GanttEntry, $$GanttEntriesTableReferences),
     GanttEntry,
     PrefetchHooks Function({bool recordingId})>;
+typedef $$RecallChunksTableCreateCompanionBuilder = RecallChunksCompanion
+    Function({
+  required String id,
+  required String recordingId,
+  required String kind,
+  required String body,
+  Value<int?> startMs,
+  Value<int?> endMs,
+  required Uint8List vector,
+  required int dimensions,
+  required String embeddingModel,
+  required DateTime indexedAt,
+  Value<int> rowid,
+});
+typedef $$RecallChunksTableUpdateCompanionBuilder = RecallChunksCompanion
+    Function({
+  Value<String> id,
+  Value<String> recordingId,
+  Value<String> kind,
+  Value<String> body,
+  Value<int?> startMs,
+  Value<int?> endMs,
+  Value<Uint8List> vector,
+  Value<int> dimensions,
+  Value<String> embeddingModel,
+  Value<DateTime> indexedAt,
+  Value<int> rowid,
+});
+
+final class $$RecallChunksTableReferences extends BaseReferences<
+    _$TranscriptDatabase, $RecallChunksTable, RecallChunkRow> {
+  $$RecallChunksTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $RecordingsTable _recordingIdTable(_$TranscriptDatabase db) =>
+      db.recordings.createAlias('recall_chunks__recording_id__recordings__id');
+
+  $$RecordingsTableProcessedTableManager get recordingId {
+    final $_column = $_itemColumn<String>('recording_id')!;
+
+    final manager = $$RecordingsTableTableManager($_db, $_db.recordings)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_recordingIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$RecallChunksTableFilterComposer
+    extends Composer<_$TranscriptDatabase, $RecallChunksTable> {
+  $$RecallChunksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kind => $composableBuilder(
+      column: $table.kind, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get body => $composableBuilder(
+      column: $table.body, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get startMs => $composableBuilder(
+      column: $table.startMs, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get endMs => $composableBuilder(
+      column: $table.endMs, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<Uint8List> get vector => $composableBuilder(
+      column: $table.vector, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get dimensions => $composableBuilder(
+      column: $table.dimensions, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get embeddingModel => $composableBuilder(
+      column: $table.embeddingModel,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get indexedAt => $composableBuilder(
+      column: $table.indexedAt, builder: (column) => ColumnFilters(column));
+
+  $$RecordingsTableFilterComposer get recordingId {
+    final $$RecordingsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableFilterComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$RecallChunksTableOrderingComposer
+    extends Composer<_$TranscriptDatabase, $RecallChunksTable> {
+  $$RecallChunksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+      column: $table.kind, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get body => $composableBuilder(
+      column: $table.body, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get startMs => $composableBuilder(
+      column: $table.startMs, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get endMs => $composableBuilder(
+      column: $table.endMs, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<Uint8List> get vector => $composableBuilder(
+      column: $table.vector, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get dimensions => $composableBuilder(
+      column: $table.dimensions, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get embeddingModel => $composableBuilder(
+      column: $table.embeddingModel,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get indexedAt => $composableBuilder(
+      column: $table.indexedAt, builder: (column) => ColumnOrderings(column));
+
+  $$RecordingsTableOrderingComposer get recordingId {
+    final $$RecordingsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableOrderingComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$RecallChunksTableAnnotationComposer
+    extends Composer<_$TranscriptDatabase, $RecallChunksTable> {
+  $$RecallChunksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<int> get startMs =>
+      $composableBuilder(column: $table.startMs, builder: (column) => column);
+
+  GeneratedColumn<int> get endMs =>
+      $composableBuilder(column: $table.endMs, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get vector =>
+      $composableBuilder(column: $table.vector, builder: (column) => column);
+
+  GeneratedColumn<int> get dimensions => $composableBuilder(
+      column: $table.dimensions, builder: (column) => column);
+
+  GeneratedColumn<String> get embeddingModel => $composableBuilder(
+      column: $table.embeddingModel, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get indexedAt =>
+      $composableBuilder(column: $table.indexedAt, builder: (column) => column);
+
+  $$RecordingsTableAnnotationComposer get recordingId {
+    final $$RecordingsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$RecallChunksTableTableManager extends RootTableManager<
+    _$TranscriptDatabase,
+    $RecallChunksTable,
+    RecallChunkRow,
+    $$RecallChunksTableFilterComposer,
+    $$RecallChunksTableOrderingComposer,
+    $$RecallChunksTableAnnotationComposer,
+    $$RecallChunksTableCreateCompanionBuilder,
+    $$RecallChunksTableUpdateCompanionBuilder,
+    (RecallChunkRow, $$RecallChunksTableReferences),
+    RecallChunkRow,
+    PrefetchHooks Function({bool recordingId})> {
+  $$RecallChunksTableTableManager(
+      _$TranscriptDatabase db, $RecallChunksTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RecallChunksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RecallChunksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RecallChunksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> recordingId = const Value.absent(),
+            Value<String> kind = const Value.absent(),
+            Value<String> body = const Value.absent(),
+            Value<int?> startMs = const Value.absent(),
+            Value<int?> endMs = const Value.absent(),
+            Value<Uint8List> vector = const Value.absent(),
+            Value<int> dimensions = const Value.absent(),
+            Value<String> embeddingModel = const Value.absent(),
+            Value<DateTime> indexedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RecallChunksCompanion(
+            id: id,
+            recordingId: recordingId,
+            kind: kind,
+            body: body,
+            startMs: startMs,
+            endMs: endMs,
+            vector: vector,
+            dimensions: dimensions,
+            embeddingModel: embeddingModel,
+            indexedAt: indexedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String recordingId,
+            required String kind,
+            required String body,
+            Value<int?> startMs = const Value.absent(),
+            Value<int?> endMs = const Value.absent(),
+            required Uint8List vector,
+            required int dimensions,
+            required String embeddingModel,
+            required DateTime indexedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RecallChunksCompanion.insert(
+            id: id,
+            recordingId: recordingId,
+            kind: kind,
+            body: body,
+            startMs: startMs,
+            endMs: endMs,
+            vector: vector,
+            dimensions: dimensions,
+            embeddingModel: embeddingModel,
+            indexedAt: indexedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable<$RecallChunksTable, RecallChunkRow>(table),
+                    $$RecallChunksTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({recordingId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (recordingId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.recordingId,
+                    referencedTable:
+                        $$RecallChunksTableReferences._recordingIdTable(db),
+                    referencedColumn:
+                        $$RecallChunksTableReferences._recordingIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$RecallChunksTableProcessedTableManager = ProcessedTableManager<
+    _$TranscriptDatabase,
+    $RecallChunksTable,
+    RecallChunkRow,
+    $$RecallChunksTableFilterComposer,
+    $$RecallChunksTableOrderingComposer,
+    $$RecallChunksTableAnnotationComposer,
+    $$RecallChunksTableCreateCompanionBuilder,
+    $$RecallChunksTableUpdateCompanionBuilder,
+    (RecallChunkRow, $$RecallChunksTableReferences),
+    RecallChunkRow,
+    PrefetchHooks Function({bool recordingId})>;
 
 class $TranscriptDatabaseManager {
   final _$TranscriptDatabase _db;
@@ -6427,4 +7390,6 @@ class $TranscriptDatabaseManager {
       $$CodexNotesTableTableManager(_db, _db.codexNotes);
   $$GanttEntriesTableTableManager get ganttEntries =>
       $$GanttEntriesTableTableManager(_db, _db.ganttEntries);
+  $$RecallChunksTableTableManager get recallChunks =>
+      $$RecallChunksTableTableManager(_db, _db.recallChunks);
 }

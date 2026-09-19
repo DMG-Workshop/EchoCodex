@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 import 'src/desktop/desktop_shell.dart';
 import 'src/onboarding/onboarding_screen.dart';
 import 'src/privacy/crash_log.dart';
+import 'src/diagnostics/debug_mode.dart';
 import 'src/recording/recording_controller.dart';
 import 'src/recording/reminder_service.dart';
 import 'src/screens/record_screen.dart';
@@ -37,11 +38,22 @@ Future<void> main() async {
     inferenceEngines: const [LiteRtLmEngine()],
   );
 
+  // Debug Mode after the crash reporter and the settings, because it needs both: the
+  // same redactor, so a verbose log cannot leak what the crash reports are careful not
+  // to, and the persisted flag, which is read once here and pushed into the logger.
+  final settings = SettingsStore(prefs);
+  final debug = await installDebugMode(
+    diagnostics: diagnostics,
+    settings: settings,
+  );
+
   runApp(
     ProviderScope(
       overrides: [
-        settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
+        settingsStoreProvider.overrideWithValue(settings),
         diagnosticsProvider.overrideWithValue(diagnostics),
+        debugModeProvider.overrideWithValue(debug),
+        debugLogProvider.overrideWithValue(debug.log),
         reminderServiceProvider.overrideWithValue(reminders),
       ],
       child: const EchoCodexApp(),

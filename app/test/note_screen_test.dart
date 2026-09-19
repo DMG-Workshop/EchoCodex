@@ -1,19 +1,43 @@
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:echo_codex_app/src/data/database.dart' as db;
 import 'package:echo_codex_app/src/recording/recording_controller.dart';
 import 'package:echo_codex_app/src/screens/note_screen.dart';
+import 'package:echo_codex_app/src/settings/provider_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
 
 void main() {
-  Future<void> pumpNote(WidgetTester tester, db.Recording recording) async {
+  /// The note screen reads settings: which tabs it shows depends on the workflow
+  /// feature switches, so every pump needs a store behind it.
+  Future<List<Override>> baseOverrides() async {
+    SharedPreferences.setMockInitialValues(const {});
+    final prefs = await SharedPreferences.getInstance();
+    return [settingsStoreProvider.overrideWithValue(SettingsStore(prefs))];
+  }
+
+  late FakeRecordingRepository noteRepo;
+
+  /// Every recording the fake should know about. The screen reads the repository
+  /// directly now — naming a speaker offers names used in OTHER recordings — so a
+  /// real drift database behind these tests would be both slow and shared state.
+  Future<void> pumpNote(
+    WidgetTester tester,
+    db.Recording recording, {
+    List<db.Recording> alsoKnown = const [],
+  }) async {
+    noteRepo = FakeRecordingRepository([recording, ...alsoKnown]);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...await baseOverrides(),
+          repositoryProvider.overrideWithValue(noteRepo),
           recordingsProvider.overrideWith((ref) => Stream.value([recording])),
         ],
         child: const MaterialApp(home: NoteScreen(recordingId: 'r_1')),
@@ -137,6 +161,158 @@ void main() {
     expect(find.textContaining('Alice: Hello there'), findsOneWidget);
   });
 
+  group('playback where just_audio has no implementation', () {
+    tearDown(() {
+      audioPlaybackSupported = () => !Platform.isLinux && !Platform.isWindows;
+    });
+
+    testWidgets('says why there is no play button instead of leaving a gap',
+        (tester) async {
+      audioPlaybackSupported = () => false;
+      await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('not available on this platform'),
+          findsOneWidget);
+      expect(find.textContaining('still saved'), findsOneWidget,
+          reason: 'the audio is on disk and still exports — a user who cannot '
+              'find the play control is owed that distinction');
+    });
+
+    testWidgets('the transcript itself still opens and reads', (tester) async {
+      audioPlaybackSupported = () => false;
+      await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull,
+          reason: 'building the player threw on the way in, taking the readable '
+              'transcript down with the playback nobody could have had');
+      expect(find.textContaining('said out loud'), findsWidgets);
+    });
+
+    testWidgets('where playback works, nothing apologises for it',
+        (tester) async {
+      audioPlaybackSupported = () => true;
+      await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('not available on this platform'), findsNothing);
+    });
+  });
+
+  group('naming the same person across recordings', () {
+    String segmentsFor(List<String> speakers) => jsonEncode([
+          for (var i = 0; i < speakers.length; i++)
+            {
+              'startMs': i * 1000,
+              'endMs': (i + 1) * 1000,
+              'text': 'line $i',
+              'speaker': speakers[i],
+            },
+        ]);
+
+    /// An earlier recording where the user already named two voices. Note the
+    /// labels differ from the current recording's — that is the whole problem.
+    db.Recording earlierNamed() => recordingRow(
+          transcriptText: 'older meeting',
+          transcriptSegmentsJson: segmentsFor(['SPEAKER_04', 'SPEAKER_05']),
+        ).copyWith(
+          id: 'r_old',
+          title: 'Last week',
+          startedAt: DateTime(2026, 9, 1),
+          speakerNamesJson: drift.Value(jsonEncode(
+              {'SPEAKER_04': 'Sarah Chen', 'SPEAKER_05': 'Marcus'})),
+        );
+
+    Future<void> openNaming(WidgetTester tester,
+        {List<db.Recording> alsoKnown = const []}) async {
+      await pumpNote(
+        tester,
+        recordingRow(
+          transcriptText: 'Hello there Hi',
+          transcriptSegmentsJson: segmentsFor(['SPEAKER_00', 'SPEAKER_01']),
+        ),
+        alsoKnown: alsoKnown,
+      );
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Edit speaker names'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('names used before are offered', (tester) async {
+      await openNaming(tester, alsoKnown: [earlierNamed()]);
+
+      expect(find.widgetWithText(ActionChip, 'Sarah Chen'), findsWidgets,
+          reason: 'the same colleague is SPEAKER_04 one week and SPEAKER_00 '
+              'the next, so naming starts from nothing every time');
+      expect(find.widgetWithText(ActionChip, 'Marcus'), findsWidgets);
+    });
+
+    testWidgets('tapping one fills that voice in', (tester) async {
+      await openNaming(tester, alsoKnown: [earlierNamed()]);
+
+      await tester.tap(find.widgetWithText(ActionChip, 'Sarah Chen').first);
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextField>(find.byType(TextField).first);
+      expect(field.controller?.text, 'Sarah Chen');
+    });
+
+    testWidgets('a name taken by one voice is not offered for the other',
+        (tester) async {
+      await openNaming(tester, alsoKnown: [earlierNamed()]);
+
+      await tester.tap(find.widgetWithText(ActionChip, 'Sarah Chen').first);
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(ActionChip, 'Sarah Chen'), findsNothing,
+          reason: 'one person cannot be two of the speakers in one conversation');
+      expect(find.widgetWithText(ActionChip, 'Marcus'), findsWidgets,
+          reason: 'the others are still on offer');
+    });
+
+    testWidgets('nothing is matched to a voice automatically', (tester) async {
+      await openNaming(tester, alsoKnown: [earlierNamed()]);
+
+      final field = tester.widget<TextField>(find.byType(TextField).first);
+      expect(field.controller?.text, 'SPEAKER_00',
+          reason: 'the app has no idea whether this is the same person as last '
+              'week, and guessing would attribute decisions to people who never '
+              'made them');
+    });
+
+    testWidgets('a raw label left in place is not offered as a name later',
+        (tester) async {
+      final neverNamed = recordingRow(
+        transcriptText: 'older',
+        transcriptSegmentsJson: segmentsFor(['SPEAKER_09']),
+      ).copyWith(
+        id: 'r_raw',
+        startedAt: DateTime(2026, 8, 1),
+        // Saved without editing: the label is its own "name".
+        speakerNamesJson:
+            drift.Value(jsonEncode({'SPEAKER_09': 'SPEAKER_09'})),
+      );
+
+      await openNaming(tester, alsoKnown: [neverNamed]);
+
+      expect(find.widgetWithText(ActionChip, 'SPEAKER_09'), findsNothing,
+          reason: 'a value still equal to its provider label is not a name');
+    });
+
+    testWidgets('with no history there are no suggestions', (tester) async {
+      await openNaming(tester);
+
+      expect(find.byType(ActionChip), findsNothing);
+      expect(find.text('Name speakers'), findsOneWidget,
+          reason: 'the dialog still opens and still works by typing');
+    });
+  });
+
   testWidgets('no study aids says so, rather than an empty tab', (tester) async {
     await pumpNote(tester, recordingRow());
     await tester.tap(find.text('Study'));
@@ -225,6 +401,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...await baseOverrides(),
           recordingsProvider.overrideWith((ref) => Stream.value(const [])),
         ],
         child: const MaterialApp(home: NoteScreen(recordingId: 'r_gone')),
@@ -242,7 +419,10 @@ void main() {
       repo = FakeRecordingRepository([recordingRow()]);
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [repositoryProvider.overrideWithValue(repo)],
+          overrides: [
+            ...await baseOverrides(),
+            repositoryProvider.overrideWithValue(repo),
+          ],
           child: MaterialApp(
             home: Builder(
               builder: (context) => Scaffold(
