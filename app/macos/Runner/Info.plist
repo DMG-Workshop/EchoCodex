@@ -2,6 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- A sandboxed macOS app is refused the microphone outright without both the
+	     entitlement and this string; the prompt never even appears. The wording names
+	     the benefit rather than the mechanism, the same as the iOS copy. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Echo Codex records audio so it can be turned into notes and action items on this device or by the AI service you choose.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech recognition runs on this device to turn your recordings into text without sending audio anywhere.</string>
+	<!-- Reaching Ollama or LM Studio on the LAN. Without this, macOS blocks the
+	     connection in a way that looks exactly like the server being down. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Echo Codex connects to a model running on your own computer so your recordings never leave your network.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleExecutable</key>
