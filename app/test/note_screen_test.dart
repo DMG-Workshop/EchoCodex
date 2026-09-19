@@ -6,14 +6,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:echo_codex_app/src/data/database.dart' as db;
 import 'package:echo_codex_app/src/recording/recording_controller.dart';
 import 'package:echo_codex_app/src/screens/note_screen.dart';
+import 'package:echo_codex_app/src/settings/provider_config.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fixtures.dart';
 
 void main() {
+  /// The note screen reads settings: which tabs it shows depends on the workflow
+  /// feature switches, so every pump needs a store behind it.
+  Future<List<Override>> baseOverrides() async {
+    SharedPreferences.setMockInitialValues(const {});
+    final prefs = await SharedPreferences.getInstance();
+    return [settingsStoreProvider.overrideWithValue(SettingsStore(prefs))];
+  }
+
   Future<void> pumpNote(WidgetTester tester, db.Recording recording) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...await baseOverrides(),
           recordingsProvider.overrideWith((ref) => Stream.value([recording])),
         ],
         child: const MaterialApp(home: NoteScreen(recordingId: 'r_1')),
@@ -225,6 +236,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          ...await baseOverrides(),
           recordingsProvider.overrideWith((ref) => Stream.value(const [])),
         ],
         child: const MaterialApp(home: NoteScreen(recordingId: 'r_gone')),
@@ -242,7 +254,10 @@ void main() {
       repo = FakeRecordingRepository([recordingRow()]);
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [repositoryProvider.overrideWithValue(repo)],
+          overrides: [
+            ...await baseOverrides(),
+            repositoryProvider.overrideWithValue(repo),
+          ],
           child: MaterialApp(
             home: Builder(
               builder: (context) => Scaffold(

@@ -332,6 +332,14 @@ class _WorkflowSettingsScreenState
               'Keep every dictation locally with raw and cleaned transcript text.'),
           _toggle(store, 'liveProgress', 'Live progress',
               'Show the rolling transcript and true recording-position progress.'),
+          const _SectionHeader('Planning'),
+          _toggle(
+              store,
+              'ganttChart',
+              'Gantt chart',
+              'A tab for scheduling a recording\'s work onto a timeline, and an '
+                  '"add to Gantt" button beside each line of notes. Off, both '
+                  'disappear — anything already on a chart is kept, not deleted.'),
           const _SectionHeader('Smart study aids'),
           _toggle(store, 'smartSummaries', 'Smart summaries and key concepts',
               'Generate a concise summary and the important concepts.'),

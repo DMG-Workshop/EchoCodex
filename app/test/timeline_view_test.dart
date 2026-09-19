@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:echo_codex_app/src/recording/recording_controller.dart';
 import 'package:echo_codex_app/src/screens/board_view.dart';
 import 'package:echo_codex_app/src/screens/calendar_view.dart';
+import 'package:echo_codex_app/src/screens/timeline_view.dart';
 import 'package:echo_codex_app/src/screens/export_sheet.dart';
 import 'package:echo_codex_app/src/screens/note_screen.dart';
 import 'package:echo_codex_app/src/settings/provider_config.dart';
@@ -268,6 +269,86 @@ void main() {
     expect(find.text('Not on the chart yet'), findsNothing,
         reason: 'an empty tray is a tray worth hiding');
     expect(tester.takeException(), isNull);
+  });
+
+  group('switching the Gantt chart off', () {
+    /// [keepRepo] re-pumps against the same storage, so a test can flip the
+    /// switch without the fake repository forgetting what was on the chart.
+    Future<void> pumpWithGantt(WidgetTester tester,
+        {required bool on, bool keepRepo = false}) async {
+      SharedPreferences.setMockInitialValues({'workflow.ganttChart': on});
+      final prefs = await SharedPreferences.getInstance();
+      final row = recordingRow();
+      if (!keepRepo) repo = FakeRecordingRepository([row]);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
+            repositoryProvider.overrideWithValue(repo),
+            recordingsProvider.overrideWith((ref) => Stream.value([row])),
+          ],
+          child: const MaterialApp(home: NoteScreen(recordingId: 'r_1')),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the tab and the button both go, not just the tab',
+        (tester) async {
+      await pumpWithGantt(tester, on: false);
+
+      expect(find.text('Gantt'), findsNothing);
+      expect(find.byTooltip('Add to Gantt'), findsNothing,
+          reason: 'a switch that leaves its buttons scattered through the notes '
+              'has not been switched off, it has been hidden');
+    });
+
+    testWidgets('the remaining tabs still all work', (tester) async {
+      await pumpWithGantt(tester, on: false);
+
+      for (final tab in ['Notes', 'Tasks', 'Calendar', 'Study', 'Transcript']) {
+        expect(find.text(tab), findsOneWidget);
+      }
+
+      await tester.tap(find.text('Calendar'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CalendarView), findsOneWidget,
+          reason: 'dropping a tab must not shift the others out of step');
+    });
+
+    testWidgets('the wide layout drops the split when there is no plan',
+        (tester) async {
+      await pumpWithGantt(tester, on: false);
+
+      expect(find.byType(VerticalDivider), findsNothing);
+      expect(find.byType(TimelineView), findsNothing);
+    });
+
+    testWidgets('switched on, everything is back', (tester) async {
+      await pumpWithGantt(tester, on: true);
+
+      expect(find.text('Gantt'), findsOneWidget);
+      expect(find.byTooltip('Add to Gantt'), findsWidgets);
+      expect(find.byType(VerticalDivider), findsOneWidget);
+    });
+
+    testWidgets('a chart built earlier is kept, not deleted', (tester) async {
+      await pumpWithGantt(tester, on: true);
+      await tester.tap(find.text('Gantt'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add an item'));
+      await tester.pumpAndSettle();
+      await addThroughForm(tester, title: 'Cut the release branch');
+      expect(repo.ganttFor('r_1'), hasLength(1));
+
+      await pumpWithGantt(tester, on: false, keepRepo: true);
+      await pumpWithGantt(tester, on: true, keepRepo: true);
+
+      await tester.tap(find.text('Gantt'));
+      await tester.pumpAndSettle();
+      expect(find.text('Cut the release branch'), findsOneWidget,
+          reason: 'hiding a feature is not a reason to destroy what it holds');
+    });
   });
 
   group('reaching the tabs on a tablet', () {

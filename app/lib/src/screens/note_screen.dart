@@ -87,9 +87,22 @@ class _NoteView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final note = decodeNote(recording);
+    // Off, the chart is gone everywhere rather than just from the tab bar: a
+    // feature switch that leaves its buttons scattered through the notes has not
+    // been switched off, it has been hidden.
+    final gantt = ref.watch(settingsStoreProvider).workflowEnabled('ganttChart');
+
+    final tabs = <String>[
+      'Notes',
+      'Tasks',
+      if (gantt) 'Gantt',
+      'Calendar',
+      'Study',
+      'Transcript',
+    ];
 
     return DefaultTabController(
-      length: 6,
+      length: tabs.length,
       child: Scaffold(
         appBar: AppBar(
           title: Text(
@@ -115,17 +128,10 @@ class _NoteView extends ConsumerWidget {
               onPressed: () => _confirmDelete(context, ref),
             ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: [
-              Tab(text: 'Notes'),
-              Tab(text: 'Tasks'),
-              Tab(text: 'Gantt'),
-              Tab(text: 'Calendar'),
-              Tab(text: 'Study'),
-              Tab(text: 'Transcript'),
-            ],
+            tabs: [for (final tab in tabs) Tab(text: tab)],
           ),
         ),
         body: note == null
@@ -137,14 +143,18 @@ class _NoteView extends ConsumerWidget {
                   // layout used to replace the whole TabBarView, which left the tab bar
                   // rendered but inert — on a tablet, every tab after the first did
                   // nothing at all when tapped.
-                  final wide = constraints.maxWidth >= 900;
+                  // A wide screen has room to read the notes and the plan at
+                  // once, so the first tab becomes a split view there — but only
+                  // when there is a plan to put beside them.
+                  final wide = constraints.maxWidth >= 900 && gantt;
                   return TabBarView(children: [
                     if (wide)
                       _TabletOverview(note: note, recording: recording)
                     else
                       _NotesTab(note: note, recording: recording),
                     BoardView(recordingId: recording.id, note: note),
-                    TimelineView(recordingId: recording.id, note: note),
+                    if (gantt)
+                      TimelineView(recordingId: recording.id, note: note),
                     CalendarView(recordingId: recording.id, note: note),
                     _StudyTab(note: note),
                     _TranscriptTab(note: note, recording: recording),
@@ -260,7 +270,10 @@ class _NotesTab extends ConsumerWidget {
                   // a line of notes into something the user keeps, and neither happens
                   // on its own. The chart asks for more than the Codex does only
                   // because a bar cannot be drawn without dates.
-                  IconButton(
+                  if (ref
+                      .watch(settingsStoreProvider)
+                      .workflowEnabled('ganttChart'))
+                    IconButton(
                     icon: const Icon(Icons.add_chart, size: 20),
                     tooltip: 'Add to Gantt',
                     visualDensity: VisualDensity.compact,
