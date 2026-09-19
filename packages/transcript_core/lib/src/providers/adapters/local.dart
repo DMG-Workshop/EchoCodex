@@ -35,6 +35,7 @@ class LocalStructuringProvider extends StructuringProvider {
     required this.model,
     this.flavor = LocalFlavor.ollama,
     this.apiKey,
+    this.strictSchema = true,
   }) : _transport = transport;
 
   /// Local models are slow to first token when cold — loading a 7B from disk can take
@@ -48,6 +49,18 @@ class LocalStructuringProvider extends StructuringProvider {
 
   /// Some users put a reverse proxy with auth in front of their model server.
   final String? apiKey;
+
+  /// Whether to constrain generation to the schema with `response_format`.
+  ///
+  /// On by default because the output is then valid by construction. The cost is
+  /// severe on CPU: llama.cpp compiles the schema into a GBNF grammar and checks every
+  /// sampled token against it, which for a schema this size is most of the work — it
+  /// is why a 30-second recording can saturate every core for minutes.
+  ///
+  /// Off, the schema goes in the prompt instead and the pipeline's repair loop handles
+  /// a model that strays. Faster, and usually fine on a capable model; worse on a
+  /// small one, which is exactly when someone would be reaching for this.
+  final bool strictSchema;
 
   int _discoveredContext = 0;
 
@@ -64,7 +77,9 @@ class LocalStructuringProvider extends StructuringProvider {
   ProviderCapabilities get capabilities => ProviderCapabilities(
         acceptsAudio: false,
         acceptsText: true,
-        nativeJsonSchema: true,
+        // False when the schema is only in the prompt, so anything downstream
+        // deciding how much to trust the shape of the reply sees the truth.
+        nativeJsonSchema: strictSchema,
         requiresApiKey: false,
         runsOnDevice: false, // on the user's network, not on the phone
         contextWindowTokens: _discoveredContext,
@@ -168,19 +183,26 @@ class LocalStructuringProvider extends StructuringProvider {
         // "it times out when it makes the notes".
         'stream': true,
         'messages': [
-          {'role': 'system', 'content': request.systemPrompt},
+          {
+            'role': 'system',
+            'content': strictSchema
+                ? request.systemPrompt
+                : _promptWithSchema(request),
+          },
           for (final turn in request.priorTurns)
             {'role': turn.role, 'content': turn.content},
           {'role': 'user', 'content': request.userContent},
         ],
-        'response_format': {
-          'type': 'json_schema',
-          'json_schema': {
-            'name': 'note_document',
-            'strict': true,
-            'schema': renderSchema(request.schema, SchemaDialect.openAiStrict),
+        if (strictSchema)
+          'response_format': {
+            'type': 'json_schema',
+            'json_schema': {
+              'name': 'note_document',
+              'strict': true,
+              'schema':
+                  renderSchema(request.schema, SchemaDialect.openAiStrict),
+            },
           },
-        },
       },
     );
 
@@ -211,6 +233,20 @@ class LocalStructuringProvider extends StructuringProvider {
     // actually happens — older llama.cpp builds and some proxies do exactly that.
     return _fromWholeBody(raw.toString());
   }
+
+  /// The schema, carried in the prompt because the request will not constrain it.
+  ///
+  /// Same shape the on-device Gemma adapter uses, for the same reason: a model asked
+  /// for "the NoteDocument schema" without being shown it will invent a plausible one,
+  /// and a plausible wrong shape costs the whole repair budget before anyone learns
+  /// what went wrong.
+  String _promptWithSchema(StructureRequest request) =>
+      '${request.systemPrompt}\n\n'
+      'SCHEMA — the NoteDocument JSON Schema referenced above. Conform to it '
+      'exactly: every property it requires must be present, and no other '
+      'properties may be added. Reply with that JSON object and nothing else — '
+      'no prose, no code fence.\n'
+      '${jsonEncode(renderSchema(request.schema, SchemaDialect.plain))}';
 
   /// Parses a non-streamed chat completion, for a server that ignored `stream`.
   StructureResponse _fromWholeBody(String body) {

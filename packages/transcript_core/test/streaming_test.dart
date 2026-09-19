@@ -186,6 +186,55 @@ void main() {
       );
     });
 
+    test('strict mode constrains the reply to the schema', () async {
+      final transport = ChunkedTransport([sse('{}')]);
+      await providerWith(transport).structure(request);
+
+      final body = transport.calls.single.jsonBody! as Map<String, dynamic>;
+      expect(body['response_format'], isNotNull);
+      expect(
+        ((body['messages'] as List).first as Map)['content'],
+        'write a note',
+        reason: 'the schema is in the request, so it need not be in the prompt',
+      );
+    });
+
+    test('without strict mode the schema moves into the prompt', () async {
+      final transport = ChunkedTransport([sse('{}')]);
+      await LocalStructuringProvider(
+        transport: transport,
+        baseUrl: Uri.parse('http://192.168.1.50:11434'),
+        model: 'qwen2.5:7b',
+        strictSchema: false,
+      ).structure(request);
+
+      final body = transport.calls.single.jsonBody! as Map<String, dynamic>;
+      expect(body.containsKey('response_format'), isFalse,
+          reason:
+              'constraining every token to a grammar is most of the work on '
+              'a processor-only machine');
+      final system =
+          ((body['messages'] as List).first as Map)['content'] as String;
+      expect(system, contains('SCHEMA'));
+      expect(system, contains('"type"'),
+          reason: 'a model asked for a schema it was never shown invents a '
+              'plausible one, which costs the whole repair budget');
+    });
+
+    test('turning strict off is reported through capabilities', () {
+      final transport = ChunkedTransport(const []);
+      expect(providerWith(transport).capabilities.nativeJsonSchema, isTrue);
+      expect(
+        LocalStructuringProvider(
+          transport: transport,
+          baseUrl: Uri.parse('http://192.168.1.50:11434'),
+          model: 'qwen2.5:7b',
+          strictSchema: false,
+        ).capabilities.nativeJsonSchema,
+        isFalse,
+      );
+    });
+
     test('going quiet is reported as stopping, not as being slow', () async {
       final transport = _SilentTransport();
 

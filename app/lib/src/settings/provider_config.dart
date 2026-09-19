@@ -178,12 +178,14 @@ class ProviderFactory {
     WhisperEngine? whisperEngine,
     GemmaEngine? gemmaEngine,
     LiveTranscriptionSource Function()? liveSource,
-  })  : _whisperEngine = whisperEngine ?? NativeWhisperEngine(),
+  })  : _settings = settings,
+        _whisperEngine = whisperEngine ?? NativeWhisperEngine(),
         _gemmaEngine = gemmaEngine ?? OnDeviceGemmaEngine(settings),
         _liveSource = liveSource ?? OnDeviceSpeechSource.new;
 
   final HttpTransport _transport;
   final KeyStore _keys;
+  final SettingsStore _settings;
   final WhisperEngine _whisperEngine;
   final GemmaEngine _gemmaEngine;
 
@@ -242,6 +244,7 @@ class ProviderFactory {
               ? LocalFlavor.ollama
               : LocalFlavor.lmStudio,
           apiKey: key,
+          strictSchema: _settings.workflowEnabled('strictJsonSchema'),
         ),
       ProviderKind.gemmaOnDevice =>
         GemmaStructuringProvider(engine: _gemmaEngine),

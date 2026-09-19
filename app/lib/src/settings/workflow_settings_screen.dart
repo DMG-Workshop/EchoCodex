@@ -341,6 +341,17 @@ class _WorkflowSettingsScreenState
               'Let the search box look through what was actually said, not just '
                   'titles and the notes you kept. Off, transcripts stay on the '
                   'device exactly as before — they are simply not searched.'),
+          const _SectionHeader('Local model performance'),
+          _toggle(
+              store,
+              'strictJsonSchema',
+              'Force the note\'s exact shape',
+              'Makes a local server constrain every word it writes to the note '
+                  'format, so the result is always valid. It is also most of the '
+                  'work: on a processor-only machine this is what makes writing '
+                  'notes take minutes. Turn it off to go much faster and let the '
+                  'app correct the model instead — worth trying if notes are slow '
+                  'or time out.'),
           const _SectionHeader('Ask your recordings'),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
