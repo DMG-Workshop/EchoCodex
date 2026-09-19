@@ -34,6 +34,24 @@ void main() {
       return container.read(structuringReadyProvider.future);
     }
 
+    test('the custom vocabulary switch actually turns the vocabulary off',
+        () async {
+      await settings.setCustomVocabulary('Kubernetes, Grafana, Istio');
+      expect(settings.vocabularyContext, contains('Kubernetes'),
+          reason: 'on by default, like every other workflow switch');
+
+      await settings.setWorkflowEnabled('customVocabulary', false);
+      expect(settings.vocabularyContext, isNull,
+          reason: 'the switch said off while the list kept reaching the model');
+
+      await settings.setWorkflowEnabled('customVocabulary', true);
+      expect(settings.vocabularyContext, contains('Istio'));
+    });
+
+    test('an empty vocabulary sends nothing even when switched on', () async {
+      expect(settings.vocabularyContext, isNull);
+    });
+
     test('nothing chosen yet is not ready', () async {
       expect(await container.read(structuringReadyProvider.future), isFalse);
     });

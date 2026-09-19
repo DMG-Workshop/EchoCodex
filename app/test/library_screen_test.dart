@@ -55,6 +55,50 @@ void main() {
     expect(find.text('Standup notes'), findsNothing);
   });
 
+  group('the searchable-history switch', () {
+    /// Two recordings: one whose TITLE matches, one where only the transcript does.
+    Future<void> pumpTwo(WidgetTester tester, {required bool on}) => pumpLibrary(
+          tester,
+          settings: {'workflow.searchableHistory': on},
+          rows: [
+            recordingRow(
+              structured: false,
+              transcriptText: 'we argued about pelicans for an hour',
+            ).copyWith(id: 'r_2', title: 'Standup notes'),
+          ],
+        );
+
+    testWidgets('on, the search reaches what was actually said', (tester) async {
+      await pumpTwo(tester, on: true);
+
+      await tester.enterText(find.byType(TextField), 'pelicans');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Standup notes'), findsOneWidget);
+    });
+
+    testWidgets('off, transcripts are not searched', (tester) async {
+      await pumpTwo(tester, on: false);
+
+      await tester.enterText(find.byType(TextField), 'pelicans');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Standup notes'), findsNothing,
+          reason: 'the switch used to gate nothing at all — every word anyone '
+              'had said stayed searchable with it turned off');
+    });
+
+    testWidgets('off, titles are still searchable', (tester) async {
+      await pumpTwo(tester, on: false);
+
+      await tester.enterText(find.byType(TextField), 'Standup');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Standup notes'), findsOneWidget,
+          reason: 'it narrows the search, it does not disable it');
+    });
+  });
+
   testWidgets('searching finds generated note content', (tester) async {
     final note = noteJson();
     final task = (note['tasks'] as List<dynamic>).first as Map<String, dynamic>;

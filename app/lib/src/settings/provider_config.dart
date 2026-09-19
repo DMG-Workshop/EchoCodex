@@ -548,6 +548,18 @@ class SettingsStore {
   String get customVocabulary =>
       _prefs.getString('${_kWorkflowPrefix}vocabulary') ?? '';
 
+  /// The spelling list to send with a recording, or null when it should not be sent.
+  ///
+  /// The switch and the value live together here because the decision is one thing:
+  /// asking callers to remember to check the switch is how the switch came to be
+  /// ignored at all three call sites in the first place, leaving it saying "off" while
+  /// the list carried on reaching the model.
+  String? get vocabularyContext {
+    if (!workflowEnabled('customVocabulary')) return null;
+    final vocabulary = customVocabulary;
+    return vocabulary.isEmpty ? null : 'Custom vocabulary: $vocabulary';
+  }
+
   Future<void> setCustomVocabulary(String vocabulary) =>
       _prefs.setString('${_kWorkflowPrefix}vocabulary', vocabulary.trim());
 

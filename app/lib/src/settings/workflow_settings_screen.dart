@@ -328,10 +328,13 @@ class _WorkflowSettingsScreenState
                   'come through silent.'),
           const _MeetingCaptureNote(),
           const _SectionHeader('History and feedback'),
-          _toggle(store, 'searchableHistory', 'Searchable local history',
-              'Keep every dictation locally with raw and cleaned transcript text.'),
-          _toggle(store, 'liveProgress', 'Live progress',
-              'Show the rolling transcript and true recording-position progress.'),
+          _toggle(
+              store,
+              'searchableHistory',
+              'Search inside transcripts',
+              'Let the search box look through what was actually said, not just '
+                  'titles and the notes you kept. Off, transcripts stay on the '
+                  'device exactly as before — they are simply not searched.'),
           const _SectionHeader('Planning'),
           _toggle(
               store,

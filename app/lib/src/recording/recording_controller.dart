@@ -236,9 +236,7 @@ class RecordingController extends StateNotifier<RecordState> {
         silences: const [],
         referenceDate: _isoDate(DateTime.now()),
         timeZone: DateTime.now().timeZoneName,
-        userContext: _settings.customVocabulary.isEmpty
-            ? null
-            : 'Custom vocabulary: ${_settings.customVocabulary}',
+        userContext: _settings.vocabularyContext,
         templateInstructions: templateInstructions,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
         flashcardLimit: _flashcardLimit,
@@ -442,9 +440,7 @@ class RecordingController extends StateNotifier<RecordState> {
         silences: captured.silences,
         referenceDate: _isoDate(DateTime.now()),
         timeZone: DateTime.now().timeZoneName,
-        userContext: _settings.customVocabulary.isEmpty
-            ? null
-            : 'Custom vocabulary: ${_settings.customVocabulary}',
+        userContext: _settings.vocabularyContext,
         templateInstructions: templateInstructions,
         additionalGaps: interruptionGaps,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
@@ -536,9 +532,7 @@ class RecordingController extends StateNotifier<RecordState> {
         silences: const [],
         referenceDate: _isoDate(DateTime.now()),
         timeZone: DateTime.now().timeZoneName,
-        userContext: _settings.customVocabulary.isEmpty
-            ? null
-            : 'Custom vocabulary: ${_settings.customVocabulary}',
+        userContext: _settings.vocabularyContext,
         templateInstructions: templateInstructions,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
         flashcardLimit: _flashcardLimit,

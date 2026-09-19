@@ -164,12 +164,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   List<db.Recording> _filteredRecordings(List<db.Recording> items) {
     final needle = _query.trim().toLowerCase();
     if (needle.isEmpty) return items;
+    // "Searchable history" used to gate nothing: the switch could be turned off and
+    // every word anyone had said stayed searchable anyway. Off, search now reaches
+    // titles and the notes the user kept, and stops short of the transcripts — which
+    // is the part of the search that reads back what was said out loud.
+    final transcripts = ref
+        .read(settingsStoreProvider)
+        .workflowEnabled('searchableHistory');
     return items.where((r) {
       final noteText = _searchableNoteText(r.noteJson);
       return _contains(r.title, needle) ||
-          _contains(r.transcriptText, needle) ||
-          _contains(r.cleanedTranscriptText, needle) ||
-          _contains(noteText, needle);
+          _contains(noteText, needle) ||
+          (transcripts &&
+              (_contains(r.transcriptText, needle) ||
+                  _contains(r.cleanedTranscriptText, needle)));
     }).toList();
   }
 

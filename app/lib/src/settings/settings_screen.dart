@@ -12,6 +12,7 @@ import '../recording/recording_controller.dart';
 import '../screens/about_screen.dart';
 import '../screens/privacy_screen.dart';
 import '../screens/debug_log_screen.dart';
+import '../screens/health_screen.dart';
 import '../whisper/whisper_model_sheet.dart';
 import 'connection_test_controller.dart';
 import 'local_discovery_sheet.dart';
@@ -124,6 +125,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const PrivacyScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.monitor_heart_outlined),
+            title: const Text('Health'),
+            subtitle: const Text(
+              'Storage this app is using, and whether each configured service '
+              'is answering',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const HealthScreen()),
             ),
           ),
           ListTile(
