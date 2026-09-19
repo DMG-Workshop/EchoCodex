@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -632,6 +633,11 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
   void _initPlayer() {
     final path = widget.recording.audioPath;
     if (path == null) return;
+    // just_audio ships implementations for Android, iOS and macOS only. On Linux and
+    // Windows, constructing the player reaches an unimplemented platform channel —
+    // so the tab that shows the transcript would fail on the way in, taking the
+    // readable transcript down with the playback nobody could have had anyway.
+    if (!audioPlaybackSupported()) return;
     final player = AudioPlayer();
     _player = player;
     _positionSub = player.positionStream.listen((position) {
@@ -831,6 +837,10 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
             ],
           ),
         ),
+        if (_player == null &&
+            widget.recording.audioPath != null &&
+            !audioPlaybackSupported())
+          _NoPlaybackHere(),
         if (_player != null)
           _PlaybackBar(
             position: _position,
@@ -1279,6 +1289,51 @@ class _NameSpeakersDialogState extends State<_NameSpeakersDialog> {
           child: const Text('Save'),
         ),
       ],
+    );
+  }
+}
+
+
+/// Whether audio playback has a platform implementation here.
+///
+/// just_audio covers Android, iOS and macOS; there is no Linux or Windows
+/// implementation, so an AudioPlayer built there throws on an unimplemented channel.
+///
+/// A replaceable function rather than a direct Platform check because `flutter test`
+/// runs on the host — usually Linux — so a hard check would mean the supported branch
+/// was never exercised by any test, on any machine, which is the branch every phone
+/// actually takes.
+bool Function() audioPlaybackSupported =
+    () => !Platform.isLinux && !Platform.isWindows;
+
+/// Says why there is no play button, rather than leaving a gap.
+///
+/// The audio is still on disk and still exported; only playing it back inside the app
+/// is missing. A user who recorded something and then cannot find the play control is
+/// owed that distinction.
+class _NoPlaybackHere extends StatelessWidget {
+  const _NoPlaybackHere();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+      child: Row(
+        children: [
+          Icon(Icons.volume_off_outlined,
+              size: 16, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Playback is not available on this platform yet. The recording is '
+              'still saved, and still exports.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

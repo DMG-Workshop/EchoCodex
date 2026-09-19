@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
@@ -158,6 +159,48 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Alice: Hello there'), findsOneWidget);
+  });
+
+  group('playback where just_audio has no implementation', () {
+    tearDown(() {
+      audioPlaybackSupported = () => !Platform.isLinux && !Platform.isWindows;
+    });
+
+    testWidgets('says why there is no play button instead of leaving a gap',
+        (tester) async {
+      audioPlaybackSupported = () => false;
+      await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('not available on this platform'),
+          findsOneWidget);
+      expect(find.textContaining('still saved'), findsOneWidget,
+          reason: 'the audio is on disk and still exports — a user who cannot '
+              'find the play control is owed that distinction');
+    });
+
+    testWidgets('the transcript itself still opens and reads', (tester) async {
+      audioPlaybackSupported = () => false;
+      await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull,
+          reason: 'building the player threw on the way in, taking the readable '
+              'transcript down with the playback nobody could have had');
+      expect(find.textContaining('said out loud'), findsWidgets);
+    });
+
+    testWidgets('where playback works, nothing apologises for it',
+        (tester) async {
+      audioPlaybackSupported = () => true;
+      await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('not available on this platform'), findsNothing);
+    });
   });
 
   group('naming the same person across recordings', () {
