@@ -46,6 +46,16 @@ enum ProviderKind {
     subtitle: 'Takes audio natively.',
     stages: {ProviderStage.transcription},
   ),
+  localWhisper(
+    id: 'local-whisper',
+    label: 'Whisper server (your network)',
+    subtitle: 'A Whisper server on your own machine, where a GPU can do in '
+        'seconds what a phone does in minutes.',
+    stages: {ProviderStage.transcription},
+    needsKey: false,
+    needsEndpoint: true,
+    isLocalNetwork: true,
+  ),
   anthropic(
     id: 'anthropic',
     label: 'Claude',
@@ -179,7 +189,8 @@ class ProviderFactory {
     GemmaEngine? gemmaEngine,
     LiveTranscriptionSource Function()? liveSource,
   })  : _settings = settings,
-        _whisperEngine = whisperEngine ?? NativeWhisperEngine(),
+        _whisperEngine = whisperEngine ??
+            NativeWhisperEngine(threads: settings.whisperThreads),
         _gemmaEngine = gemmaEngine ?? OnDeviceGemmaEngine(settings),
         _liveSource = liveSource ?? OnDeviceSpeechSource.new;
 
@@ -264,6 +275,18 @@ class ProviderFactory {
           apiKey: key!,
           model: selection.model ?? 'whisper-1',
         ),
+      // Speaks /v1/audio/transcriptions, which whisper.cpp's own server,
+      // faster-whisper-server and WhisperX all serve — so the OpenAI adapter reaches
+      // them unchanged, pointed at an address instead of a cloud. A key is optional
+      // because most people put no auth in front of their own box.
+      ProviderKind.localWhisper => selection.endpoint == null
+          ? null
+          : OpenAiTranscriptionProvider(
+              transport: _transport,
+              apiKey: key ?? '',
+              model: selection.model ?? 'whisper-1',
+              baseUrl: Uri.parse(selection.endpoint!),
+            ),
       ProviderKind.geminiAudio => GeminiTranscriptionProvider(
           transport: _transport,
           apiKey: key!,
@@ -550,6 +573,18 @@ class SettingsStore {
 
   String get customVocabulary =>
       _prefs.getString('${_kWorkflowPrefix}vocabulary') ?? '';
+
+  /// Threads offline Whisper decodes with, or 0 for "work it out".
+  ///
+  /// Was fixed at the native default of 4 however many cores the device had, which on
+  /// an eight-core phone left half the machine idle and on a desktop far more than
+  /// that. Decoding is the slowest thing this app does on-device, and it scales close
+  /// to linearly here.
+  int get whisperThreads =>
+      _prefs.getInt('${_kWorkflowPrefix}whisperThreads') ?? 0;
+
+  Future<void> setWhisperThreads(int threads) =>
+      _prefs.setInt('${_kWorkflowPrefix}whisperThreads', threads.clamp(0, 32));
 
   /// The spelling list to send with a recording, or null when it should not be sent.
   ///

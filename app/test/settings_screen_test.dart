@@ -205,6 +205,56 @@ void main() {
     expect(find.widgetWithText(TextField, 'API key'), findsNothing);
   });
 
+  group('a Whisper server on your own network', () {
+    testWidgets('it is offered as a way to transcribe', (tester) async {
+      await pumpSettings(tester, []);
+
+      expect(find.text('Whisper server (your network)'), findsOneWidget,
+          reason: 'the only local transcription options were on-device; a box '
+              'with a GPU does in seconds what a phone does in minutes');
+    });
+
+    testWidgets('it asks for an address, and adds no key field', (tester) async {
+      await pumpSettings(tester, []);
+      // The screen has two provider sections. The structuring one has its own key
+      // field, so counting before and after is the only honest way to ask whether
+      // THIS choice added one.
+      final keyFieldsBefore =
+          tester.widgetList(find.widgetWithText(TextField, 'API key')).length;
+
+      await tester.tap(find.text('Whisper server (your network)'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextField, 'Address'), findsWidgets);
+      expect(tester.widgetList(find.widgetWithText(TextField, 'API key')).length,
+          keyFieldsBefore,
+          reason: 'most people put no auth in front of their own machine');
+    });
+
+    testWidgets('a reachable server reports its models', (tester) async {
+      await pumpSettings(tester, [
+        HttpReply(
+          200,
+          jsonEncode({
+            'data': [
+              {'id': 'Systran/faster-whisper-large-v3'},
+              {'id': 'Systran/faster-whisper-small'},
+            ],
+          }),
+        ),
+      ]);
+
+      await tester.tap(find.text('Whisper server (your network)'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Address'), 'http://192.168.1.50:8000');
+      await tester.tap(find.text('Test connection').first);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Connected'), findsWidgets);
+    });
+  });
+
   group('choosing a model on a local server', () {
     /// Ollama, reached and reporting what it has pulled.
     Future<void> connectOllama(WidgetTester tester,

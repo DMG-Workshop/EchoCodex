@@ -342,6 +342,25 @@ class _WorkflowSettingsScreenState
                   'titles and the notes you kept. Off, transcripts stay on the '
                   'device exactly as before — they are simply not searched.'),
           const _SectionHeader('Local model performance'),
+          ListTile(
+            title: const Text('Processor cores for offline Whisper'),
+            subtitle: Text(store.whisperThreads == 0
+                ? 'Automatic — one less than this device has, up to eight'
+                : '${store.whisperThreads} threads'),
+            trailing: DropdownButton<int>(
+              value: store.whisperThreads,
+              items: [
+                const DropdownMenuItem(value: 0, child: Text('Auto')),
+                for (final n in [2, 4, 6, 8, 12, 16])
+                  DropdownMenuItem(value: n, child: Text('$n')),
+              ],
+              onChanged: (value) async {
+                if (value == null) return;
+                await store.setWhisperThreads(value);
+                if (mounted) setState(() {});
+              },
+            ),
+          ),
           _toggle(
               store,
               'strictJsonSchema',
