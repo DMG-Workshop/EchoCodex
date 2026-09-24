@@ -32,6 +32,15 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# flutter_local_notifications_windows includes <experimental/coroutine>, which MSVC 14.51
+# turned from a deprecation warning into a hard static_assert. The plugin is upstream code,
+# so this is the escape hatch Microsoft's own error message prescribes. Directory scope,
+# before the plugin subdirectories are added below, so they inherit it.
+#
+# Remove this when the plugin moves to C++20 <coroutine>. Nothing else in this build
+# includes the experimental header, so the definition is inert everywhere else.
+add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
