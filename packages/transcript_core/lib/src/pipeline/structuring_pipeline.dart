@@ -5,8 +5,10 @@ import '../prompts/structuring_prompts.dart';
 import '../providers/provider.dart';
 import '../schema/note_schema.dart';
 import '../schema/validator.dart';
+import 'document_merge.dart';
 import 'json_extract.dart';
 import 'section_planner.dart';
+import 'structure_events.dart';
 import 'quote_verifier.dart';
 import 'transcript.dart';
 
@@ -20,6 +22,7 @@ class StructuringPipeline {
     required this.provider,
     this.maxRepairAttempts = 2,
     Map<String, dynamic>? schema,
+    this.onEvent,
   })  : schema = schema ?? noteDocumentSchema,
         _validator = SchemaValidator(schema ?? noteDocumentSchema);
 
@@ -31,6 +34,15 @@ class StructuringPipeline {
 
   final Map<String, dynamic> schema;
   final SchemaValidator _validator;
+
+  /// Told what the pipeline is doing, for Debug Mode. Null costs one null check per event,
+  /// which is the point: nothing here may make a note slower to write when nobody is
+  /// watching. See [StructureEvent] for why this exists at all.
+  final void Function(StructureEvent)? onEvent;
+
+  /// Wall-clock from the start of [run], for the finished event.
+  Stopwatch? _elapsed;
+  int _calls = 0;
 
   /// Structures a transcript, choosing single-pass or map/reduce by token budget.
   ///
@@ -80,9 +92,31 @@ class StructuringPipeline {
       quizLimit: quizLimit,
     );
 
-    return fitsSinglePass(transcript)
-        ? _singlePass(transcript, systemPrompt, onProgress)
-        : _mapReduce(transcript, systemPrompt, onProgress);
+    _elapsed = Stopwatch()..start();
+    _calls = 0;
+
+    if (!fitsSinglePass(transcript)) {
+      return _mapReduce(transcript, systemPrompt, onProgress);
+    }
+    _emit(() => StructurePlanned(
+          transcriptTokens: transcript.estimatedTokens,
+          contextWindowTokens: provider.capabilities.contextWindowTokens,
+          budgetTokens: _windowBudget(),
+          windows: 1,
+        ));
+    return _singlePass(transcript, systemPrompt, onProgress);
+  }
+
+  void _emit(StructureEvent Function() event) {
+    final listener = onEvent;
+    if (listener == null) return;
+    try {
+      listener(event());
+    } catch (_) {
+      // A diagnostic that throws must not cost the user their note. There is nowhere to
+      // report this — a logger here is exactly the dependency these events exist to
+      // avoid — and the listener is the one thing already broken, so it is dropped.
+    }
   }
 
   Future<StructureOutcome> _singlePass(
@@ -94,6 +128,7 @@ class StructuringPipeline {
     final result = await _structureValidated(
       systemPrompt,
       '<transcript>\n${transcript.toPromptFormat()}\n</transcript>',
+      phase: StructurePhase.single,
     );
     onProgress?.call(const StructureProgress(completed: 1, total: 1));
 
@@ -119,6 +154,12 @@ class StructuringPipeline {
   ) async {
     final windows =
         const SectionPlanner().split(transcript, budgetTokens: _windowBudget());
+    _emit(() => StructurePlanned(
+          transcriptTokens: transcript.estimatedTokens,
+          contextWindowTokens: provider.capabilities.contextWindowTokens,
+          budgetTokens: _windowBudget(),
+          windows: windows.length,
+        ));
     if (windows.length < 2) {
       // The budget is too small to split usefully — a tiny local context, most likely.
       // One oversized attempt beats refusing to produce anything.
@@ -149,6 +190,9 @@ class StructuringPipeline {
       final result = await _structureValidated(
         prompt,
         '<transcript>\n${window.transcript.toPromptFormat()}\n</transcript>',
+        phase: StructurePhase.map,
+        index: window.index,
+        total: window.total,
       );
 
       partials.add(result.raw);
@@ -185,52 +229,62 @@ class StructuringPipeline {
     );
   }
 
-  /// Merges the per-window documents into one, in as many rounds as it takes.
+  /// Merges the per-window documents into one.
   ///
-  /// The map phase is budgeted against the provider's context; for a long time the
-  /// reduce phase was not, and that asymmetry is what made long recordings fail. Every
-  /// partial is a whole NoteDocument — summary, sections, tasks, decisions, and a
-  /// verbatim source quote behind each one — so the reduce prompt grows with the length
-  /// of the recording. An hour of audio produces enough windows to overflow any context
-  /// the map phase was carefully kept inside, and the overflow surfaces as a model that
-  /// returns nothing parseable: "could not produce a valid note", with nothing pointing
-  /// at the real cause.
+  /// The map phase is budgeted against the provider's context; the reduce phase was not,
+  /// and that asymmetry is what makes long recordings fail. Every partial is a whole
+  /// NoteDocument — summary, sections, tasks, decisions, and a verbatim quote behind each
+  /// item — so the merge prompt grows with the length of the recording while the context
+  /// does not.
   ///
-  /// So the merge is a tree, not a single call. Partials are grouped into batches that
-  /// fit the same budget a window gets, each batch is merged, and the merged documents
-  /// go round again until one is left. That costs more round trips on a long recording,
-  /// which is the correct trade against not finishing at all.
+  /// So this merges in rounds: partials are grouped into batches that fit the same budget a
+  /// window gets, each batch is merged, and the merged documents go round again. That alone
+  /// was not enough. When the server will not say how big its context is the budget falls
+  /// back to an assumed 8k window, which leaves about 2,500 tokens for the merge — less
+  /// than two real partials. Grouping then puts every partial in a batch of its own, makes
+  /// no progress, and the rounds never start: an hour of audio ended as "the model could not
+  /// produce a valid note", and the note was never coming, at any number of retries.
+  ///
+  /// Past that point the merge stops being a thing to ask a model for. Everything it has to
+  /// do is mechanical — union the roster, keep the sections in order, drop the repeats, hold
+  /// the ids unique — so [stitchNoteDocuments] does it here, for free, with no upper bound
+  /// on length. The one request left is for the prose, over the section summaries alone.
   Future<_ValidatedStructure> _reduce(
       List<Map<String, dynamic>> partials) async {
     var level = partials;
     var repairs = 0;
     int? inputTokens;
     int? outputTokens;
+    String? model;
 
-    while (true) {
-      final batches = _batched(level, _windowBudget());
+    // Merge with the model for as long as grouping makes the set smaller. This is the pass
+    // that folds one commitment, made twice half an hour apart, into a single task.
+    var round = 0;
+    while (level.length > 1) {
+      final budget = _windowBudget();
+      final batches = _batched(level, budget);
+      final stitching = batches.length >= level.length;
+      final largest = level.map(_jsonTokens).reduce((a, b) => a > b ? a : b);
+      round++;
+      _emit(() => StructureMergePlanned(
+            round: round,
+            partials: level.length,
+            batches: batches.length,
+            budgetTokens: budget,
+            largestPartialTokens: largest,
+            stitched: stitching,
+          ));
 
-      // Everything fits in one call, or grouping cannot make the set any smaller —
-      // a single partial already over budget, most likely. Either way this is the last
-      // round, and an oversized attempt beats refusing to produce anything.
-      if (batches.length <= 1 || batches.length >= level.length) {
-        final merged = await _structureValidated(
-          StructuringPrompts.reduce,
-          _partialsPrompt(level),
-        );
-        return _ValidatedStructure(
-          merged.raw,
-          repairs + merged.repairAttempts,
-          _add(inputTokens, merged.inputTokens),
-          _add(outputTokens, merged.outputTokens),
-          merged.model,
-        );
-      }
+      // Grouping made no progress: no two of these fit one prompt. Sending all of them
+      // anyway is the call that fails, so stop here and stitch instead.
+      if (stitching) break;
 
       final next = <Map<String, dynamic>>[];
+      var batchIndex = 0;
       for (final batch in batches) {
-        // A batch of one has nothing to merge with; sending it through a reduce round
-        // would spend a request to rewrite a document that is already valid.
+        batchIndex++;
+        // A batch of one has nothing to merge with; a reduce round on it would spend a
+        // request rewriting a document that is already valid.
         if (batch.length == 1) {
           next.add(batch.single);
           continue;
@@ -238,16 +292,75 @@ class StructuringPipeline {
         final merged = await _structureValidated(
           StructuringPrompts.reduce,
           _partialsPrompt(batch),
+          phase: StructurePhase.reduce,
+          index: batchIndex,
+          total: batches.length,
         );
         repairs += merged.repairAttempts;
         inputTokens = _add(inputTokens, merged.inputTokens);
         outputTokens = _add(outputTokens, merged.outputTokens);
+        model = merged.model ?? model;
         next.add(merged.raw);
       }
 
-      // Guaranteed progress: batches.length < level.length above, and every batch
-      // collapses to exactly one document, so this terminates.
+      // Guaranteed progress: batches.length < level.length above, and every batch collapses
+      // to exactly one document, so this terminates.
       level = next;
+    }
+
+    if (level.length == 1) {
+      return _ValidatedStructure(
+          level.single, repairs, inputTokens, outputTokens, model);
+    }
+
+    final stitched = stitchNoteDocuments(level);
+    final meta = await _reduceMeta(level);
+    if (meta != null) {
+      stitched['meta'] = {
+        ...(stitched['meta'] as Map<String, dynamic>),
+        ...meta.raw,
+      };
+      repairs += meta.repairAttempts;
+      inputTokens = _add(inputTokens, meta.inputTokens);
+      outputTokens = _add(outputTokens, meta.outputTokens);
+      model = meta.model ?? model;
+    }
+    return _ValidatedStructure(
+        stitched, repairs, inputTokens, outputTokens, model);
+  }
+
+  /// One small request for the whole-recording title and summary.
+  ///
+  /// Null when it could not be had, which is not a failure: the stitched document already
+  /// carries the section summaries joined together, and plain prose on an hour of audio is
+  /// worth more than an error the user cannot do anything about.
+  Future<_ValidatedStructure?> _reduceMeta(
+      List<Map<String, dynamic>> partials) async {
+    final properties = schema['properties'];
+    final metaSchema = properties is Map ? properties['meta'] : null;
+    if (metaSchema is! Map) return null;
+
+    final sections = [
+      for (var i = 0; i < partials.length; i++)
+        {
+          'section': i + 1,
+          'of': partials.length,
+          if (partials[i]['meta'] is Map) ...partials[i]['meta'] as Map,
+        },
+    ];
+
+    try {
+      return await _structureValidated(
+        StructuringPrompts.reduceMeta,
+        '<section_summaries>\n${jsonEncode(sections)}\n</section_summaries>',
+        schema: metaSchema.cast<String, dynamic>(),
+        phase: StructurePhase.meta,
+      );
+    } on StructuringException {
+      return null;
+    } on Exception {
+      // A transport failure here is the same story: the document is already complete.
+      return null;
     }
   }
 
@@ -286,23 +399,63 @@ class StructuringPipeline {
   static int _jsonTokens(Object? value) =>
       (jsonEncode(value).length / 3.5).ceil();
 
+  /// Everything the provider is being asked to read, by the same arithmetic the budget
+  /// uses — so the log's estimate and the pipeline's decision cannot disagree.
+  static int _requestTokens(StructureRequest request) {
+    var characters = request.systemPrompt.length + request.userContent.length;
+    for (final turn in request.priorTurns) {
+      characters += turn.content.length;
+    }
+    return (characters / 3.5).ceil() + _jsonTokens(request.schema);
+  }
+
+  /// Enough of a reply to tell silence from prose from malformed JSON. Never the whole
+  /// thing: this goes in an exportable log, and the reply is the note.
+  static String? _excerpt(String reply) {
+    final trimmed = reply.trim();
+    if (trimmed.isEmpty) return null;
+    return trimmed.length <= 200 ? trimmed : '${trimmed.substring(0, 200)}…';
+  }
+
   /// One provider round trip, with tolerant parsing, validation and bounded repair.
+  ///
+  /// [schema] overrides the note schema for a call that asks for something smaller — the
+  /// merge's title-and-summary pass — so that reply is validated and repaired the same way
+  /// everything else is, rather than trusted because it was short.
   Future<_ValidatedStructure> _structureValidated(
     String systemPrompt,
-    String userContent,
-  ) async {
+    String userContent, {
+    Map<String, dynamic>? schema,
+    StructurePhase phase = StructurePhase.single,
+    int index = 1,
+    int total = 1,
+  }) async {
+    final requestSchema = schema ?? this.schema;
+    final validator = schema == null ? _validator : SchemaValidator(schema);
     final turns = <StructureTurn>[];
     var attempts = 0;
     int? inputTokens;
     int? outputTokens;
 
     while (true) {
-      final response = await provider.structure(StructureRequest(
+      final request = StructureRequest(
         systemPrompt: systemPrompt,
         userContent: userContent,
-        schema: schema,
+        schema: requestSchema,
         priorTurns: turns,
-      ));
+      );
+      _calls++;
+      _emit(() => StructureCallStarted(
+            phase: phase,
+            index: index,
+            total: total,
+            promptTokens: _requestTokens(request),
+            attempt: attempts,
+          ));
+
+      final started = Stopwatch()..start();
+      final response = await provider.structure(request);
+      started.stop();
 
       inputTokens = _add(inputTokens, response.inputTokens);
       outputTokens = _add(outputTokens, response.outputTokens);
@@ -313,9 +466,17 @@ class StructuringPipeline {
               const SchemaViolation(
                   '', 'response did not contain a JSON object')
             ]
-          : _validator.validate(parsed);
+          : validator.validate(parsed);
 
       if (violations.isEmpty && parsed != null) {
+        _emit(() => StructureCallFinished(
+              phase: phase,
+              index: index,
+              took: started.elapsed,
+              attempts: attempts,
+              inputTokens: response.inputTokens,
+              outputTokens: response.outputTokens,
+            ));
         return _ValidatedStructure(
           parsed,
           attempts,
@@ -324,6 +485,16 @@ class StructuringPipeline {
           response.model,
         );
       }
+
+      _emit(() => StructureCallFailed(
+            phase: phase,
+            index: index,
+            attempt: attempts,
+            willRetry: attempts < maxRepairAttempts,
+            violations: violations.map((v) => v.toString()).toList(),
+            replyLength: response.rawText.length,
+            replyExcerpt: _excerpt(response.rawText),
+          ));
 
       if (attempts >= maxRepairAttempts) {
         throw StructuringException(
@@ -380,11 +551,18 @@ class StructuringPipeline {
     String? model,
   ]) {
     final document = NoteDocument.fromJson(parsed);
+    final unverified = verifyQuotes(document, transcript);
+    _emit(() => StructureFinished(
+          took: _elapsed?.elapsed ?? Duration.zero,
+          calls: _calls,
+          repairAttempts: attempts,
+          unverifiedQuotes: unverified.length,
+        ));
     return StructureOutcome(
       document: document,
       raw: parsed,
       repairAttempts: attempts,
-      unverifiedQuotes: verifyQuotes(document, transcript),
+      unverifiedQuotes: unverified,
       inputTokens: inputTokens,
       outputTokens: outputTokens,
       model: model,

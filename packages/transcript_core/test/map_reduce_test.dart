@@ -102,6 +102,136 @@ class ContextBoundProvider extends StructuringProvider {
   }
 }
 
+/// A local server with a small, honest context, answering each request the way one really
+/// would: a prompt that does not fit comes back as nothing usable, every section gets its
+/// own note, and every one of those notes numbers its first task `t1`.
+///
+/// The last detail is the one that matters. Real partials are big enough that two of them
+/// cannot share a 2,500-token merge prompt, which is all an assumed 8k context leaves.
+class SmallContextServer extends StructuringProvider {
+  SmallContextServer({
+    this.contextWindowTokens = 8192,
+    this.maxOutputTokens = 2048,
+    this.bulletsPerSection = 40,
+    this.answersMeta = true,
+  });
+
+  final int contextWindowTokens;
+  final int maxOutputTokens;
+
+  /// How fat each section's note is. Forty bullets is about 1,900 tokens of JSON, which is
+  /// what a real note for a few minutes of meeting runs to.
+  final int bulletsPerSection;
+
+  /// Whether it can write the merge's title and summary. False stands in for a model that
+  /// ignores the smaller schema and hands back something else entirely.
+  final bool answersMeta;
+
+  final List<StructureRequest> requests = [];
+  final List<int> promptTokens = [];
+  var _sections = 0;
+
+  int _tokensOf(StructureRequest r) {
+    final text = StringBuffer()
+      ..write(r.systemPrompt)
+      ..write(r.userContent);
+    for (final turn in r.priorTurns) {
+      text.write(turn.content);
+    }
+    return (text.length / 3.5).ceil() +
+        (jsonEncode(r.schema).length / 3.5).ceil();
+  }
+
+  Map<String, dynamic> sectionNote(int n) {
+    final note = validNoteJson();
+    (note['meta'] as Map<String, dynamic>)
+      ..['title'] = 'Section $n'
+      ..['summary'] = 'Section $n covered ground of its own and closed on a '
+          'commitment nobody else made.'
+      ..['extractionConfidence'] = n == 2 ? 'low' : 'high';
+    note['sections'] = [
+      {
+        'heading': 'Topic $n',
+        'bullets': [
+          for (var i = 0; i < bulletsPerSection; i++)
+            'Point $i made during section $n, written out at the length a real '
+                'bullet runs to so that one of these notes is a realistic size.',
+        ],
+        'sourceRef': {
+          'startMs': n * 1000,
+          'endMs': n * 1000 + 500,
+          'quote': 'This is turn number $n and it carries',
+        },
+      },
+    ];
+    note['tasks'] = [
+      {
+        ...(validNoteJson()['tasks'] as List).first as Map<String, dynamic>,
+        // Every section numbers its own first task `t1`. Two of these are not one task.
+        'id': 't1',
+        'title': 'Do the thing that came out of section $n',
+      },
+    ];
+    return note;
+  }
+
+  @override
+  ProviderId get id => const ProviderId('small-context');
+  @override
+  String get displayName => 'Small context';
+  @override
+  ProviderCapabilities get capabilities => ProviderCapabilities(
+        acceptsAudio: false,
+        acceptsText: true,
+        nativeJsonSchema: true,
+        contextWindowTokens: contextWindowTokens,
+        maxOutputTokens: maxOutputTokens,
+      );
+  @override
+  Future<ConnectionResult> test() async =>
+      ConnectionResult.success(summary: 'ok');
+
+  @override
+  Future<StructureResponse> structure(StructureRequest request) async {
+    requests.add(request);
+    final tokens = _tokensOf(request);
+    promptTokens.add(tokens);
+    if (tokens + maxOutputTokens > contextWindowTokens) {
+      return const StructureResponse(
+          rawText: '', inputTokens: 0, outputTokens: 0);
+    }
+    if (request.userContent.contains('<section_summaries>')) {
+      return StructureResponse(
+        rawText: answersMeta
+            ? jsonEncode({
+                'title': 'One long meeting',
+                'summary': 'A whole-recording summary, written from the '
+                    'section summaries alone.',
+                'recordingType': 'meeting',
+                'language': 'en-US',
+                'extractionConfidence': 'low',
+              })
+            : jsonEncode(validNoteJson()),
+        inputTokens: 100,
+        outputTokens: 40,
+      );
+    }
+    return StructureResponse(
+      rawText: jsonEncode(sectionNote(++_sections)),
+      inputTokens: 100,
+      outputTokens: 40,
+    );
+  }
+}
+
+/// Big enough that the merge is model-led: the transcript still has to be split, but two
+/// partial documents fit one merge prompt.
+///
+/// 8192 does not, once the 4096-token output reserve is taken out — it leaves a 500-token
+/// budget, which is less than a single partial. That case is real and has its own group
+/// below; these tests are about the merge that happens when there is room for it.
+const int mergeableContext = 12000;
+
 void main() {
   Transcript longTranscript({int segments = 200}) => Transcript([
         for (var i = 0; i < segments; i++)
@@ -230,7 +360,7 @@ void main() {
     test('a transcript that does not fit is mapped then reduced', () async {
       final provider = ScriptedProvider(
         List.filled(20, jsonEncode(validNoteJson())),
-        contextWindowTokens: 8192,
+        contextWindowTokens: mergeableContext,
       );
       await runLong(provider);
 
@@ -247,7 +377,7 @@ void main() {
     test('each window is told to keep offsets absolute', () async {
       final provider = ScriptedProvider(
         List.filled(20, jsonEncode(validNoteJson())),
-        contextWindowTokens: 8192,
+        contextWindowTokens: mergeableContext,
       );
       await runLong(provider);
 
@@ -259,7 +389,7 @@ void main() {
     test('the participant roster is carried forward between windows', () async {
       final provider = ScriptedProvider(
         List.filled(20, jsonEncode(validNoteJson())),
-        contextWindowTokens: 8192,
+        contextWindowTokens: mergeableContext,
       );
       await runLong(provider);
 
@@ -276,7 +406,7 @@ void main() {
         () async {
       final provider = ScriptedProvider(
         List.filled(20, jsonEncode(validNoteJson())),
-        contextWindowTokens: 8192,
+        contextWindowTokens: mergeableContext,
       );
       await runLong(provider);
 
@@ -289,7 +419,7 @@ void main() {
     test('progress covers every window plus the merge', () async {
       final provider = ScriptedProvider(
         List.filled(20, jsonEncode(validNoteJson())),
-        contextWindowTokens: 8192,
+        contextWindowTokens: mergeableContext,
       );
       final seen = <StructureProgress>[];
       await runLong(provider, onProgress: seen.add);
@@ -303,7 +433,7 @@ void main() {
     test('tokens are summed across every window and the merge', () async {
       final provider = ScriptedProvider(
         List.filled(20, jsonEncode(validNoteJson())),
-        contextWindowTokens: 8192,
+        contextWindowTokens: mergeableContext,
       );
       final outcome = await runLong(provider);
 
@@ -339,7 +469,7 @@ void main() {
 
       final provider = ScriptedProvider(
         List.filled(20, jsonEncode(note)),
-        contextWindowTokens: 8192,
+        contextWindowTokens: mergeableContext,
       );
       final outcome = await runLong(provider);
 
@@ -458,6 +588,133 @@ void main() {
       await expectLater(run(provider), throwsA(isA<StructuringException>()));
       expect(provider.requests, isNotEmpty,
           reason: 'it has to have tried, not refused up front');
+    });
+  });
+
+  group('an hour on a small context', () {
+    // What the user actually has: a local server that will not say how big its context is,
+    // so the pipeline assumes 8k and has about 2,500 tokens for the merge. Half an hour
+    // produced few enough sections to squeeze into one merge call; an hour did not, and the
+    // note came back as "the model could not produce a valid note" instead.
+    Future<StructureOutcome> run(SmallContextServer server,
+            {int segments = 900}) =>
+        StructuringPipeline(provider: server).run(
+          transcript: longTranscript(segments: segments),
+          referenceDate: '2026-09-05',
+          timeZone: 'UTC',
+          sttProviderName: 'Whisper',
+        );
+
+    test('produces a note instead of an error', () async {
+      final server = SmallContextServer();
+
+      final outcome = await run(server);
+
+      expect(outcome.document.sections, isNotEmpty);
+      expect(outcome.document.tasks, isNotEmpty);
+      expect(
+        server.promptTokens.every((t) => t + server.maxOutputTokens <= 8192),
+        isTrue,
+        reason: 'not one request may exceed the context the map phase respects',
+      );
+    });
+
+    test('keeps every section, and every section\'s task', () async {
+      final server = SmallContextServer();
+
+      final outcome = await run(server);
+
+      final sections = server.requests
+          .where((r) => r.userContent.contains('<transcript>'))
+          .length;
+      expect(sections, greaterThan(4),
+          reason:
+              'an hour at this budget is many sections, or this proves nothing');
+      expect(outcome.document.sections, hasLength(sections),
+          reason: 'losing a section loses that part of the meeting');
+      expect(outcome.document.tasks, hasLength(sections));
+    });
+
+    test('holds ids unique across sections that all numbered their task t1',
+        () async {
+      final server = SmallContextServer();
+
+      final outcome = await run(server);
+
+      final ids = outcome.document.tasks.map((t) => t.id).toList();
+      expect(ids.toSet(), hasLength(ids.length),
+          reason: 'two cards with one id is a duplicate key on the board');
+    });
+
+    test('a dependency still points at the task it pointed at', () async {
+      final server = SmallContextServer();
+      final outcome = await run(server);
+
+      final ids = outcome.document.tasks.map((t) => t.id).toSet();
+      for (final task in outcome.document.tasks) {
+        for (final dep in task.dependsOn) {
+          expect(ids, contains(dep),
+              reason: 'a renamed id must take its references with it');
+        }
+      }
+    });
+
+    test('spends its last request on the summary, not on the documents',
+        () async {
+      final server = SmallContextServer();
+
+      final outcome = await run(server);
+
+      final last = server.requests.last;
+      expect(last.userContent, contains('<section_summaries>'));
+      expect(last.userContent, isNot(contains('<partial_documents>')),
+          reason:
+              'handing the model every document is the call that does not fit');
+      expect(
+          outcome.document.meta.summary, contains('whole-recording summary'));
+      expect(
+        (jsonEncode(last.schema).length / 3.5).ceil(),
+        lessThan(1000),
+        reason: 'the small call must carry the small schema',
+      );
+    });
+
+    test('still finishes when the model cannot write the summary either',
+        () async {
+      final server = SmallContextServer(answersMeta: false);
+
+      final outcome = await run(server);
+
+      expect(outcome.document.sections, isNotEmpty,
+          reason: 'plain prose beats an error on an hour of audio');
+      expect(outcome.document.meta.summary, contains('Section 1'),
+          reason: 'the stitched summary is the section summaries, joined');
+    });
+
+    test('takes the lowest confidence of any section', () async {
+      final server = SmallContextServer(answersMeta: false);
+
+      final outcome = await run(server);
+
+      expect(
+          outcome.document.meta.extractionConfidence, ExtractionConfidence.low,
+          reason: 'a merged note is only as good as its worst section');
+    });
+
+    test('still merges with the model when two notes do fit one prompt',
+        () async {
+      // Same recording, a server that admits to 32k. The model-led merge is better at
+      // folding a commitment made twice, so it must not be given up when it is affordable.
+      final server = SmallContextServer(contextWindowTokens: 32768);
+
+      await run(server);
+
+      expect(
+        server.requests
+            .any((r) => r.userContent.contains('<partial_documents>')),
+        isTrue,
+        reason: 'the model merge is the better one wherever it fits',
+      );
     });
   });
 }

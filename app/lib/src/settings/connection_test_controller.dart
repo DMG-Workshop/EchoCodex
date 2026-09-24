@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transcript_core/transcript_core.dart';
 
+import '../recording/recording_controller.dart' show settingsStoreProvider;
 import 'provider_config.dart';
 
 /// Drives the connection tester.
@@ -9,10 +10,11 @@ import 'provider_config.dart';
 /// physical device) can prove that a key works, that a laptop on the LAN is reachable,
 /// and that the platform is not silently blocking the request.
 class ConnectionTestController extends StateNotifier<ConnectionTestState> {
-  ConnectionTestController(this._factory)
+  ConnectionTestController(this._factory, this._settings)
       : super(const ConnectionTestState.idle());
 
   final ProviderFactory _factory;
+  final SettingsStore _settings;
 
   Future<void> run(ProviderSelection selection, ProviderStage stage) async {
     state = const ConnectionTestState.running();
@@ -46,7 +48,22 @@ class ConnectionTestController extends StateNotifier<ConnectionTestState> {
     // Adapters promise never to throw from test(); this guard exists so a bug in one
     // adapter cannot take down the settings screen.
     try {
-      state = ConnectionTestState.done(await provider.test());
+      final result = await provider.test();
+
+      // Testing the connection is the one moment the app asks a local server about
+      // anything other than a note, so it is where the context window gets learned. Saved
+      // rather than kept on the adapter, because the adapter is rebuilt for every
+      // recording and would otherwise go back to assuming something small — which is what
+      // turns an hour of audio into a dozen sections and a merge that has to work around
+      // its own budget. Never overwrites a number the user set themselves.
+      if (result.ok &&
+          result.contextWindowTokens > 0 &&
+          _settings.localContextWindowTokens == 0) {
+        await _settings
+            .setLocalContextWindowTokens(result.contextWindowTokens);
+      }
+
+      state = ConnectionTestState.done(result);
     } catch (e) {
       state = ConnectionTestState.done(
         ConnectionResult.failure(
@@ -83,5 +100,8 @@ class ConnectionTestDone extends ConnectionTestState {
 
 final connectionTestProvider = StateNotifierProvider.family<
     ConnectionTestController, ConnectionTestState, ProviderStage>(
-  (ref, stage) => ConnectionTestController(ref.watch(providerFactoryProvider)),
+  (ref, stage) => ConnectionTestController(
+    ref.watch(providerFactoryProvider),
+    ref.watch(settingsStoreProvider),
+  ),
 );

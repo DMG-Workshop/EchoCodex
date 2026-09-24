@@ -36,6 +36,7 @@ class LocalStructuringProvider extends StructuringProvider {
     this.flavor = LocalFlavor.ollama,
     this.apiKey,
     this.strictSchema = true,
+    this.declaredContextWindowTokens = 0,
   }) : _transport = transport;
 
   /// Local models are slow to first token when cold — loading a 7B from disk can take
@@ -62,7 +63,22 @@ class LocalStructuringProvider extends StructuringProvider {
   /// small one, which is exactly when someone would be reaching for this.
   final bool strictSchema;
 
+  /// The context window the user told us about, or 0 to go with whatever the server says.
+  ///
+  /// This exists because the alternative is a guess, and the guess is expensive. A server
+  /// that will not state its context is assumed to have a small one, which is the safe
+  /// direction — a transcript sent past the real window comes back silently truncated —
+  /// but it also means an hour of audio is written in a dozen sections and merged, on a
+  /// machine that could have taken it in two. Ollama reports the model's trained context
+  /// rather than the `num_ctx` it is actually serving, and LM Studio's answer depends on
+  /// how the model was loaded, so neither number is reliable enough to be the last word.
+  /// The user's is.
+  final int declaredContextWindowTokens;
+
   int _discoveredContext = 0;
+
+  /// What the last connection test read off the server, or 0 if it could not be read.
+  int get discoveredContextWindowTokens => _discoveredContext;
 
   @override
   ProviderId get id => ProviderId('local:${flavor.name}:${baseUrl.host}');
@@ -82,7 +98,9 @@ class LocalStructuringProvider extends StructuringProvider {
         nativeJsonSchema: strictSchema,
         requiresApiKey: false,
         runsOnDevice: false, // on the user's network, not on the phone
-        contextWindowTokens: _discoveredContext,
+        contextWindowTokens: declaredContextWindowTokens > 0
+            ? declaredContextWindowTokens
+            : _discoveredContext,
         maxOutputTokens: 4096,
       );
 
@@ -110,31 +128,54 @@ class LocalStructuringProvider extends StructuringProvider {
         summary: '${result.summary} · context window unknown',
         models: result.models,
         latency: result.latency,
-        detail:
-            'Long recordings will be processed in sections, conservatively.',
+        contextWindowTokens: declaredContextWindowTokens,
+        detail: declaredContextWindowTokens > 0
+            ? '${ModelCapacity.describe(declaredContextWindowTokens)}, going by '
+                'the size you set. The server would not say.'
+            : 'The server would not say how much it can read at once, so long '
+                'recordings are processed in sections, conservatively. If you '
+                'know the number, setting it makes them faster.',
       );
     }
 
     _discoveredContext = context;
+    final effective =
+        declaredContextWindowTokens > 0 ? declaredContextWindowTokens : context;
     return ConnectionResult.success(
-      summary: '${result.summary} · ${_formatTokens(context)} context',
+      summary: '${result.summary} · ${_formatTokens(effective)} context',
       models: result.models,
       latency: result.latency,
-      detail:
-          '${ModelCapacity.describe(context)}. Anything longer is processed in '
-          'sections and merged.',
+      contextWindowTokens: context,
+      detail: '${ModelCapacity.describe(effective)}. Anything longer is '
+          'processed in sections and merged.',
     );
   }
 
   Future<int?> _discoverContextWindow() => contextWindowFor(model);
 
-  /// The real context length of [modelName], read from Ollama's `/api/show`.
+  /// The context length [modelName] is actually being served with, as far as the server
+  /// will say.
   ///
-  /// LM Studio does not expose it over HTTP at all, so callers get null and the pipeline
-  /// stays conservative rather than guessing a number the model picker would then show
-  /// as fact.
-  Future<int?> contextWindowFor(String modelName) async {
-    if (flavor != LocalFlavor.ollama) return null;
+  /// Ollama's `/api/show` gives two different numbers and they mean different things.
+  /// `parameters` carries a `num_ctx` when one was baked into the model, and that is the
+  /// window the server will really use. `model_info` carries the context the model was
+  /// trained with, which is an upper bound and frequently a wild overstatement of what is
+  /// loaded — Ollama serves 4096 by default however large the model is. So `num_ctx` wins
+  /// where it exists, because getting this too high is the failure that cannot be seen:
+  /// the transcript is truncated on the server and the note that comes back looks fine
+  /// while missing the second half of the meeting.
+  ///
+  /// LM Studio does not answer `/api/show` at all, but its own REST API reports both the
+  /// maximum and the length the model was loaded with, and the loaded one is authoritative.
+  ///
+  /// Null when nothing could be read, which leaves the pipeline conservative rather than
+  /// letting the model picker show a guess as fact.
+  Future<int?> contextWindowFor(String modelName) async => switch (flavor) {
+        LocalFlavor.ollama => _ollamaContextWindow(modelName),
+        LocalFlavor.lmStudio => _lmStudioContextWindow(modelName),
+      };
+
+  Future<int?> _ollamaContextWindow(String modelName) async {
     try {
       final reply = await _transport.send(HttpCall(
         method: 'POST',
@@ -145,16 +186,59 @@ class LocalStructuringProvider extends StructuringProvider {
       ));
       if (!reply.ok) return null;
 
+      final numCtx = _numCtx(reply.json?['parameters']);
+      if (numCtx != null) return numCtx;
+
       final info = reply.json?['model_info'];
-      if (info is! Map<String, dynamic>) return null;
+      if (info is! Map) return null;
       for (final entry in info.entries) {
-        if (entry.key.endsWith('.context_length') && entry.value is int) {
+        if ('${entry.key}'.endsWith('.context_length') && entry.value is int) {
           return entry.value as int;
         }
       }
       return null;
     } on TransportException {
       return null; // the chat endpoint already tested fine; this is a bonus
+    }
+  }
+
+  /// `num_ctx` out of Ollama's Modelfile parameter block, which arrives as lines of
+  /// `name value` rather than as JSON.
+  static int? _numCtx(Object? parameters) {
+    if (parameters is! String) return null;
+    for (final line in parameters.split('\n')) {
+      final parts = line.trim().split(RegExp(r'\s+'));
+      if (parts.length >= 2 && parts.first == 'num_ctx') {
+        return int.tryParse(parts[1]);
+      }
+    }
+    return null;
+  }
+
+  Future<int?> _lmStudioContextWindow(String modelName) async {
+    try {
+      final reply = await _transport.send(HttpCall(
+        method: 'GET',
+        url: baseUrl.resolve('/api/v0/models'),
+        headers: _headers,
+        timeout: const Duration(seconds: 30),
+      ));
+      if (!reply.ok) return null;
+
+      final data = reply.json?['data'];
+      if (data is! List) return null;
+      for (final entry in data.whereType<Map<String, dynamic>>()) {
+        if ('${entry['id']}' != modelName) continue;
+        // What it was loaded with, not what it could take: a 128k model loaded at 4k
+        // truncates at 4k, silently.
+        final loaded = entry['loaded_context_length'];
+        if (loaded is int && loaded > 0) return loaded;
+        final max = entry['max_context_length'];
+        if (max is int && max > 0) return max;
+      }
+      return null;
+    } on TransportException {
+      return null;
     }
   }
 

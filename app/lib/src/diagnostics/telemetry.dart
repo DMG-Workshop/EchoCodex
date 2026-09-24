@@ -264,3 +264,143 @@ class RecorderTelemetry {
         'expectedBytesPerSecond': monitor.expectedBytesPerSecond,
       };
 }
+
+/// Turns the structuring pipeline's events into diagnostic lines.
+///
+/// ## Why this exists
+///
+/// A recording of an hour and seven minutes failed where half an hour succeeded, and the
+/// app could say nothing about it beyond "the model could not produce a valid note". The
+/// cause was a budget: an assumed context window left about 2,500 tokens for the merge,
+/// which is less than one partial note, so the merge went out as a single call no server
+/// could read. Every number in that sentence was computed and then discarded.
+///
+/// With this wired up, the same failure reads as four lines — the context the pipeline
+/// believed it had, the budget that fell out of it, the size of the largest partial, and
+/// the reply of length zero that came back — and the arithmetic is right there rather
+/// than inferred from source a day later.
+///
+/// Same shape as [QueueTelemetry] and for the same reason: `transcript_core` emits plain
+/// events and knows nothing about logging, clocks or files.
+class StructuringTelemetry {
+  StructuringTelemetry({required this.log});
+
+  final DebugLog log;
+
+  /// Hand this to `StructuringPipeline(onEvent: ...)`, or null when nothing is being
+  /// recorded — the pipeline then does not even allocate the events.
+  void Function(StructureEvent)? get listener => log.isOn ? _onEvent : null;
+
+  void _onEvent(StructureEvent event) {
+    // Debug Mode can be switched off while a note is being written, and the pipeline was
+    // handed the listener before that happened.
+    if (!log.isOn) return;
+    try {
+      switch (event) {
+        case StructurePlanned():
+          log.info(
+            'structuring',
+            () => event.isSinglePass
+                ? 'writing the note in one pass'
+                : 'the transcript does not fit; writing it in '
+                    '${event.windows} sections',
+            fields: () => {
+              'transcriptTokens': event.transcriptTokens,
+              'contextWindowTokens': event.contextWindowTokens,
+              'contextIsAssumed': event.contextIsAssumed,
+              'budgetTokens': event.budgetTokens,
+              'windows': event.windows,
+            },
+          );
+          if (event.contextIsAssumed) {
+            log.warning(
+              'structuring',
+              () => 'the server did not say how much it can read at once, so a '
+                  'small window is assumed',
+              fields: () => {'budgetTokens': event.budgetTokens},
+            );
+          }
+
+        case StructureCallStarted():
+          log.info('structuring', () => '${_phase(event.phase)} sent',
+              fields: () => {
+                    'phase': event.phase.name,
+                    'index': event.index,
+                    'total': event.total,
+                    'promptTokens': event.promptTokens,
+                    'attempt': event.attempt,
+                  });
+
+        case StructureCallFinished():
+          log.info('structuring', () => '${_phase(event.phase)} came back',
+              fields: () => {
+                    'phase': event.phase.name,
+                    'index': event.index,
+                    'tookMs': event.took.inMilliseconds,
+                    'repairs': event.attempts,
+                    'inputTokens': event.inputTokens,
+                    'outputTokens': event.outputTokens,
+                  });
+
+        case StructureCallFailed():
+          final fields = <String, Object?>{
+            'phase': event.phase.name,
+            'index': event.index,
+            'attempt': event.attempt,
+            // Zero is the signature of a prompt past the context window: the server
+            // accepts it, reads what fits, and answers with nothing.
+            'replyLength': event.replyLength,
+            'reply': event.replyExcerpt,
+            'violations': event.violations.take(5).toList(),
+          };
+          if (event.willRetry) {
+            log.warning('structuring',
+                () => '${_phase(event.phase)} did not validate; repairing',
+                fields: () => fields);
+          } else {
+            log.error('structuring',
+                () => '${_phase(event.phase)} could not be made valid',
+                fields: () => fields);
+          }
+
+        case StructureMergePlanned():
+          log.info(
+            'structuring',
+            () => event.stitched
+                ? 'no two section notes fit one prompt, so they are merged here '
+                    'rather than by the model'
+                : 'merging ${event.partials} section notes in '
+                    '${event.batches} groups',
+            fields: () => {
+              'round': event.round,
+              'partials': event.partials,
+              'batches': event.batches,
+              'budgetTokens': event.budgetTokens,
+              'largestPartialTokens': event.largestPartialTokens,
+              'stitched': event.stitched,
+            },
+          );
+
+        case StructureFinished():
+          log.info('structuring', () => 'the note is written',
+              fields: () => {
+                    'tookMs': event.took.inMilliseconds,
+                    'calls': event.calls,
+                    'repairs': event.repairAttempts,
+                    'unverifiedQuotes': event.unverifiedQuotes,
+                  });
+      }
+    } catch (e, s) {
+      // Telemetry must never be the thing that breaks the pipeline it is watching.
+      log.error('structuring', () => 'a telemetry handler threw',
+          error: e, stack: s);
+    }
+  }
+
+  static String _phase(StructurePhase phase) => switch (phase) {
+        StructurePhase.single => 'the note',
+        StructurePhase.map => 'a section',
+        StructurePhase.reduce => 'a merge',
+        StructurePhase.meta => 'the summary',
+      };
+}

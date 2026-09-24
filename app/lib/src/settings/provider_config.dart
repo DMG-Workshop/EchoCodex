@@ -256,6 +256,7 @@ class ProviderFactory {
               : LocalFlavor.lmStudio,
           apiKey: key,
           strictSchema: _settings.workflowEnabled('strictJsonSchema'),
+          declaredContextWindowTokens: _settings.localContextWindowTokens,
         ),
       ProviderKind.gemmaOnDevice =>
         GemmaStructuringProvider(engine: _gemmaEngine),
@@ -585,6 +586,22 @@ class SettingsStore {
 
   Future<void> setWhisperThreads(int threads) =>
       _prefs.setInt('${_kWorkflowPrefix}whisperThreads', threads.clamp(0, 32));
+
+  /// How much a local server can read at once, or 0 for "go by what it says".
+  ///
+  /// The number that decides how a long recording is written. Unknown means the pipeline
+  /// assumes something small and safe, which splits an hour of audio into a dozen sections
+  /// — correct, but far more work than a machine serving 32k needs to do. Neither Ollama
+  /// nor LM Studio reports it reliably, so testing the connection fills this in with
+  /// whatever it could read and the user can correct it.
+  ///
+  /// Too high is the dangerous direction: the server truncates the transcript and returns
+  /// a note that reads perfectly while covering only the first part of the meeting.
+  int get localContextWindowTokens =>
+      _prefs.getInt('${_kWorkflowPrefix}localContextWindow') ?? 0;
+
+  Future<void> setLocalContextWindowTokens(int tokens) => _prefs.setInt(
+      '${_kWorkflowPrefix}localContextWindow', tokens < 0 ? 0 : tokens);
 
   /// The spelling list to send with a recording, or null when it should not be sent.
   ///

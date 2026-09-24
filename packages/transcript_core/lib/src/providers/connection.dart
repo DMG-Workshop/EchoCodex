@@ -11,6 +11,7 @@ class ConnectionResult {
     this.remedy,
     this.models = const [],
     this.latency,
+    this.contextWindowTokens = 0,
   });
 
   factory ConnectionResult.success({
@@ -18,6 +19,7 @@ class ConnectionResult {
     List<String> models = const [],
     Duration? latency,
     String? detail,
+    int contextWindowTokens = 0,
   }) =>
       ConnectionResult._(
         ok: true,
@@ -25,6 +27,7 @@ class ConnectionResult {
         models: models,
         latency: latency,
         detail: detail,
+        contextWindowTokens: contextWindowTokens,
       );
 
   factory ConnectionResult.failure({
@@ -57,6 +60,16 @@ class ConnectionResult {
   final List<String> models;
 
   final Duration? latency;
+
+  /// The context window the test managed to read out of the server, or 0 when it could
+  /// not be had.
+  ///
+  /// Worth carrying back: the pipeline assumes a small window when it does not know, and
+  /// a small window is what splits an hour of audio into a dozen sections and a merge
+  /// that used to fail. Testing the connection is the one moment the app is talking to
+  /// the server about anything other than a note, so it is where this gets learned — and
+  /// the caller saves it, so the answer outlives the test.
+  final int contextWindowTokens;
 }
 
 /// Maps HTTP failures to messages a user can act on, without leaking the key.

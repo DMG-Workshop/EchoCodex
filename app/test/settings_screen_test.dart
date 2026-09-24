@@ -555,14 +555,18 @@ void main() {
   });
 
   group('testing a keyless provider', () {
-    Future<ProviderFactory> factoryWith(LiveTranscriptionSource source) async {
-      final prefs = await SharedPreferences.getInstance();
-      return ProviderFactory(
-        RecordingTransport(const []),
-        InMemoryKeyStore(),
-        SettingsStore(prefs),
-        whisperEngine: _UnusedWhisperEngine(),
-        liveSource: () => source,
+    Future<ConnectionTestController> controllerWith(
+        LiveTranscriptionSource source) async {
+      final store = SettingsStore(await SharedPreferences.getInstance());
+      return ConnectionTestController(
+        ProviderFactory(
+          RecordingTransport(const []),
+          InMemoryKeyStore(),
+          store,
+          whisperEngine: _UnusedWhisperEngine(),
+          liveSource: () => source,
+        ),
+        store,
       );
     }
 
@@ -571,11 +575,9 @@ void main() {
       // provider that takes no key — the factory has no TranscriptionProvider for it
       // (it listens to the mic, so it is a LiveTranscriptionSource) and the null
       // branch assumed a missing key was the only way to get there.
-      final controller = ConnectionTestController(
-        await factoryWith(_FakeLiveSource(
-          ConnectionResult.success(summary: 'Ready · on-device · 3 languages'),
-        )),
-      );
+      final controller = await controllerWith(_FakeLiveSource(
+        ConnectionResult.success(summary: 'Ready · on-device · 3 languages'),
+      ));
 
       await controller.run(
         const ProviderSelection(kind: ProviderKind.onDeviceStt),
@@ -589,14 +591,12 @@ void main() {
 
     test('an unavailable recognizer reports why, without mentioning keys',
         () async {
-      final controller = ConnectionTestController(
-        await factoryWith(_FakeLiveSource(
-          ConnectionResult.failure(
-            summary: 'Speech recognition is unavailable on this device',
-            remedy: 'Check that dictation is enabled in system settings.',
-          ),
-        )),
-      );
+      final controller = await controllerWith(_FakeLiveSource(
+        ConnectionResult.failure(
+          summary: 'Speech recognition is unavailable on this device',
+          remedy: 'Check that dictation is enabled in system settings.',
+        ),
+      ));
 
       await controller.run(
         const ProviderSelection(kind: ProviderKind.onDeviceStt),
@@ -608,6 +608,109 @@ void main() {
       expect(state.result.summary, contains('unavailable'));
       expect(state.result.remedy, isNot(contains('key')),
           reason: 'nothing here takes a key');
+    });
+  });
+
+  group('how much a local server reads at once', () {
+    // The number that decides how a long recording gets written. Assumed small when
+    // unknown, which is safe and slow: an hour of audio becomes a dozen sections.
+    Future<(SettingsStore, ConnectionTestController)> tester(
+        List<Object> replies) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = SettingsStore(await SharedPreferences.getInstance());
+      final transport = RecordingTransport(replies);
+      return (
+        store,
+        ConnectionTestController(
+          ProviderFactory(
+            transport,
+            InMemoryKeyStore(),
+            store,
+            whisperEngine: _UnusedWhisperEngine(),
+          ),
+          store,
+        ),
+      );
+    }
+
+    const selection = ProviderSelection(
+      kind: ProviderKind.ollama,
+      endpoint: 'http://192.168.1.50:11434',
+      model: 'llama3.1:8b',
+    );
+
+    test('is remembered after a connection test, not just reported', () async {
+      final (store, controller) = await tester([
+        HttpReply(
+            200,
+            jsonEncode({
+              'data': [
+                {'id': 'llama3.1:8b'}
+              ]
+            })),
+        HttpReply(
+            200,
+            jsonEncode({
+              'model_info': {'llama.context_length': 16384},
+            })),
+      ]);
+
+      await controller.run(selection, ProviderStage.structuring);
+
+      expect(store.localContextWindowTokens, 16384,
+          reason: 'the adapter is rebuilt for every recording, so a number '
+              'kept only on the adapter is a number learned and thrown away');
+    });
+
+    test('a number the user chose is not overwritten by a test', () async {
+      final (store, controller) = await tester([
+        HttpReply(
+            200,
+            jsonEncode({
+              'data': [
+                {'id': 'llama3.1:8b'}
+              ]
+            })),
+        HttpReply(
+            200,
+            jsonEncode({
+              'model_info': {'llama.context_length': 131072},
+            })),
+      ]);
+      await store.setLocalContextWindowTokens(8192);
+
+      await controller.run(selection, ProviderStage.structuring);
+
+      expect(store.localContextWindowTokens, 8192,
+          reason: 'Ollama reports what the model was trained with, not what it '
+              'is serving; someone who corrected it meant it');
+    });
+
+    test('a failed test teaches nothing', () async {
+      final (store, controller) = await tester([
+        const TransportException(
+            TransportFailure.refused, 'Connection refused'),
+      ]);
+
+      await controller.run(selection, ProviderStage.structuring);
+
+      expect(store.localContextWindowTokens, 0);
+    });
+
+    test('reaches the provider that writes the notes', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = SettingsStore(await SharedPreferences.getInstance());
+      await store.setLocalContextWindowTokens(32768);
+
+      final provider = await ProviderFactory(
+        RecordingTransport(const []),
+        InMemoryKeyStore(),
+        store,
+        whisperEngine: _UnusedWhisperEngine(),
+      ).structuring(selection);
+
+      expect(provider!.capabilities.contextWindowTokens, 32768,
+          reason: 'a setting the pipeline never sees is not a setting');
     });
   });
 

@@ -620,7 +620,11 @@ class RecordingController extends StateNotifier<RecordState> {
 
     return DurableRecordingPipeline(
       queue: queue,
-      structuring: StructuringPipeline(provider: providers.structuring),
+      structuring: StructuringPipeline(
+        provider: providers.structuring,
+        // Null when Debug Mode is off, so the pipeline does not even build the events.
+        onEvent: StructuringTelemetry(log: _debugLog).listener,
+      ),
     );
   }
 

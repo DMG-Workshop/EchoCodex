@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:echo_codex_app/src/diagnostics/telemetry.dart';
@@ -21,6 +22,8 @@ class _Sink implements DebugSink {
 }
 
 void main() {
+  group('structuring', structuringTests);
+
   late _Sink sink;
   late DebugLog log;
   late StreamController<QueueEvent> events;
@@ -239,5 +242,252 @@ void main() {
 
       expect(sink.entries, isEmpty);
     });
+  });
+}
+
+/// A local server small enough to break on, and honest about it: a prompt past the
+/// context comes back as nothing usable, which is exactly what one does.
+class _SmallServer extends StructuringProvider {
+  _SmallServer({
+    this.contextWindowTokens = 8192,
+    this.maxOutputTokens = 2048,
+    this.reports,
+  });
+
+  final int contextWindowTokens;
+  final int maxOutputTokens;
+
+  /// What it admits to, when that differs from what it has. Null means it tells the
+  /// truth; 0 is the server that will not say, which is most of them.
+  final int? reports;
+  var _sections = 0;
+
+  @override
+  ProviderId get id => const ProviderId('small');
+  @override
+  String get displayName => 'Small';
+  @override
+  ProviderCapabilities get capabilities => ProviderCapabilities(
+        acceptsAudio: false,
+        acceptsText: true,
+        nativeJsonSchema: true,
+        contextWindowTokens: reports ?? contextWindowTokens,
+        maxOutputTokens: maxOutputTokens,
+      );
+  @override
+  Future<ConnectionResult> test() async =>
+      ConnectionResult.success(summary: 'ok');
+
+  @override
+  Future<StructureResponse> structure(StructureRequest request) async {
+    var characters = request.systemPrompt.length + request.userContent.length;
+    for (final turn in request.priorTurns) {
+      characters += turn.content.length;
+    }
+    final tokens = (characters / 3.5).ceil() +
+        (jsonEncode(request.schema).length / 3.5).ceil();
+    if (tokens + maxOutputTokens > contextWindowTokens) {
+      return const StructureResponse(rawText: '');
+    }
+    if (request.userContent.contains('<section_summaries>')) {
+      return StructureResponse(
+          rawText: jsonEncode({
+        'title': 'One long meeting',
+        'summary': 'What happened, in a sentence.',
+        'recordingType': 'meeting',
+        'language': 'en-US',
+        'extractionConfidence': 'high',
+      }));
+    }
+    return StructureResponse(rawText: jsonEncode(_note(++_sections)));
+  }
+
+  Map<String, dynamic> _note(int n) => {
+        'meta': {
+          'title': 'Section $n',
+          'summary': 'Section $n covered ground of its own.',
+          'recordingType': 'meeting',
+          'language': 'en-US',
+          'extractionConfidence': 'high',
+        },
+        'participants': const <Map<String, dynamic>>[],
+        'sections': [
+          {
+            'heading': 'Topic $n',
+            'bullets': [
+              for (var i = 0; i < 40; i++)
+                'Point $i made during section $n, written out at the length a '
+                    'real bullet runs to so this note is a realistic size.',
+            ],
+            'sourceRef': {'startMs': 0, 'endMs': 1, 'quote': 'turn number $n'},
+          }
+        ],
+        'decisions': const <Map<String, dynamic>>[],
+        'openQuestions': const <Map<String, dynamic>>[],
+        'tasks': const <Map<String, dynamic>>[],
+        'risks': const <Map<String, dynamic>>[],
+        'timelineAnchors': const <Map<String, dynamic>>[],
+        'keyConcepts': null,
+        'flashcards': null,
+        'quiz': null,
+      };
+}
+
+/// An hour of speech, in turns long enough to consume a window budget.
+Transcript _longTranscript({int segments = 900}) => Transcript([
+      for (var i = 0; i < segments; i++)
+        TranscriptSegment(
+          startMs: i * 4000,
+          endMs: (i + 1) * 4000,
+          text: 'This is turn number $i and it carries a reasonable amount of '
+              'speech so the window budget is actually consumed.',
+          speaker: 'SPEAKER_0${i % 3}',
+        ),
+    ]);
+
+void structuringTests() {
+  late _Sink sink;
+  late DebugLog log;
+
+  setUp(() {
+    sink = _Sink();
+    log = DebugLog(sink: sink);
+  });
+
+  tearDown(() => log.dispose());
+
+  Future<void> writeNote({
+    int context = 8192,
+    void Function(StructureEvent)? listener,
+  }) async {
+    await StructuringPipeline(
+      provider: _SmallServer(contextWindowTokens: context),
+      onEvent: listener ?? StructuringTelemetry(log: log).listener,
+    ).run(
+      transcript: _longTranscript(),
+      referenceDate: '2026-09-05',
+      timeZone: 'UTC',
+      sttProviderName: 'Whisper',
+    );
+    await log.flush();
+  }
+
+  Iterable<DebugEntry> structuring() =>
+      sink.entries.where((e) => e.tag == 'structuring');
+
+  DebugEntry withField(String key) =>
+      structuring().firstWhere((e) => e.fields.containsKey(key));
+
+  test('nothing is recorded while debug mode is off', () async {
+    await writeNote();
+    expect(sink.entries, isEmpty,
+        reason: 'writing a note must cost nothing extra when nobody is '
+            'watching, which is the whole design of the flag');
+  });
+
+  test('the pipeline is not even handed a listener when the log is off', () {
+    expect(StructuringTelemetry(log: log).listener, isNull,
+        reason: 'null means the pipeline does not build the events either');
+  });
+
+  test('the numbers that decide how a long recording is written are recorded',
+      () async {
+    await log.setEnabled(true);
+    await writeNote();
+
+    final planned = withField('budgetTokens');
+    expect(planned.fields['windows'], greaterThan(4));
+    expect(planned.fields['contextWindowTokens'], 8192);
+    expect(planned.fields['budgetTokens'], isA<int>());
+    expect(planned.fields['transcriptTokens'], isA<int>());
+  });
+
+  test('a merge done here rather than by the model says so, with why',
+      () async {
+    await log.setEnabled(true);
+    await writeNote();
+
+    final merge = withField('largestPartialTokens');
+    expect(merge.fields['stitched'], isTrue);
+    expect(merge.fields['partials'], merge.fields['batches'],
+        reason: 'a batch per partial is what "nothing can be grouped" means');
+    expect(
+      merge.fields['largestPartialTokens'] as int,
+      greaterThan((merge.fields['budgetTokens'] as int) ~/ 2),
+      reason: 'the arithmetic that made the old merge impossible, written down',
+    );
+  });
+
+  test('an assumed context window is a warning, not a silent default',
+      () async {
+    await log.setEnabled(true);
+    await StructuringPipeline(
+      // 32k of real capacity, and not a word about it — which is what forces the
+      // pipeline onto its assumption.
+      provider: _SmallServer(contextWindowTokens: 32768, reports: 0),
+      onEvent: StructuringTelemetry(log: log).listener,
+    ).run(
+      transcript: _longTranscript(segments: 200),
+      referenceDate: '2026-09-05',
+      timeZone: 'UTC',
+      sttProviderName: 'Whisper',
+    );
+    await log.flush();
+
+    final warning =
+        structuring().firstWhere((e) => e.level == DebugLevel.warning);
+    expect(warning.message, contains('did not say how much it can read'));
+  });
+
+  test('a reply of nothing at all is recorded as nothing at all', () async {
+    await log.setEnabled(true);
+    // A context too small for even one section: every call overflows, which is what the
+    // server answers with silence.
+    await expectLater(
+      StructuringPipeline(
+        provider: _SmallServer(contextWindowTokens: 3000, maxOutputTokens: 900),
+        onEvent: StructuringTelemetry(log: log).listener,
+      ).run(
+        transcript: _longTranscript(segments: 60),
+        referenceDate: '2026-09-05',
+        timeZone: 'UTC',
+        sttProviderName: 'Whisper',
+      ),
+      throwsA(isA<StructuringException>()),
+    );
+    await log.flush();
+
+    final failure = structuring().firstWhere((e) => e.level == DebugLevel.error);
+    expect(failure.fields['replyLength'], 0,
+        reason: 'a length of zero is the signature of a prompt past the '
+            'context window, and it is the fact that was missing');
+    final sent = structuring().lastWhere((e) => e.message.contains('sent'));
+    expect(sent.fields['promptTokens'], isA<int>(),
+        reason: 'the size of the prompt that overflowed sits beside it');
+  });
+
+  test('every call is timed and priced', () async {
+    await log.setEnabled(true);
+    await writeNote();
+
+    final finished = structuring().where((e) => e.message.contains('came back'));
+    expect(finished, isNotEmpty);
+    expect(finished.every((e) => e.fields.containsKey('tookMs')), isTrue);
+
+    final done = structuring().last;
+    expect(done.message, contains('the note is written'));
+    expect(done.fields['calls'], greaterThan(1));
+  });
+
+  test('a handler that throws does not take the note down with it', () async {
+    await log.setEnabled(true);
+    var seen = 0;
+    await writeNote(listener: (event) {
+      seen++;
+      throw StateError('telemetry is broken');
+    });
+
+    expect(seen, greaterThan(1),
+        reason: 'the pipeline kept going, and kept reporting');
   });
 }

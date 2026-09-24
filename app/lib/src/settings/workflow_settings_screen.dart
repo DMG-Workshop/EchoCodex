@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:transcript_core/transcript_core.dart';
 
 import '../recording/recording_controller.dart';
 import 'provider_config.dart';
@@ -361,6 +362,41 @@ class _WorkflowSettingsScreenState
               },
             ),
           ),
+          ListTile(
+            title: const Text('How much your server reads at once'),
+            subtitle: Text(store.localContextWindowTokens == 0
+                ? 'Unknown — long recordings are written in short sections, to '
+                    'be safe. Testing the connection fills this in.'
+                : '${_tokens(store.localContextWindowTokens)} · '
+                    '${ModelCapacity.describe(store.localContextWindowTokens)}'),
+            isThreeLine: store.localContextWindowTokens == 0,
+            trailing: DropdownButton<int>(
+              value: _contextChoices.contains(store.localContextWindowTokens)
+                  ? store.localContextWindowTokens
+                  : 0,
+              items: [
+                for (final tokens in _contextChoices)
+                  DropdownMenuItem(
+                    value: tokens,
+                    child: Text(tokens == 0 ? 'Auto' : _tokens(tokens)),
+                  ),
+              ],
+              onChanged: (value) async {
+                if (value == null) return;
+                await store.setLocalContextWindowTokens(value);
+                if (mounted) setState(() {});
+              },
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Text(
+              'Set this too high and your server quietly drops the end of a long '
+              'recording, and the notes look fine without it. When in doubt, '
+              'leave it lower than you think.',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
           _toggle(
               store,
               'strictJsonSchema',
@@ -483,3 +519,18 @@ class _SectionHeader extends StatelessWidget {
             style: Theme.of(context).textTheme.labelLarge),
       );
 }
+
+/// Context sizes worth offering. Every common local build serves one of these, and a
+/// free-text field invites a typo that silently truncates the second half of a meeting.
+const List<int> _contextChoices = [
+  0,
+  4096,
+  8192,
+  16384,
+  32768,
+  65536,
+  131072,
+];
+
+String _tokens(int value) =>
+    value >= 1024 ? '${(value / 1024).round()}k tokens' : '$value tokens';
