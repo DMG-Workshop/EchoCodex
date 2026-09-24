@@ -432,6 +432,8 @@ void main() {
                 {'id': 'local-model'}
               ]
             })),
+        // An older LM Studio, before it served its own REST API.
+        HttpReply(404, 'Not Found'),
       ]);
 
       final provider = LocalStructuringProvider(
@@ -445,6 +447,108 @@ void main() {
       expect(result.ok, isTrue);
       expect(provider.capabilities.contextWindowTokens, 0,
           reason: 'zero means unknown, which forces the map/reduce path');
+      expect(result.detail, contains('setting it makes them faster'),
+          reason: 'the user can supply the number the server would not');
+    });
+
+    test('reads the length LM Studio actually loaded the model at', () async {
+      final transport = RecordingTransport([
+        HttpReply(
+            200,
+            jsonEncode({
+              'data': [
+                {'id': 'qwen3-8b'}
+              ]
+            })),
+        HttpReply(
+            200,
+            jsonEncode({
+              'data': [
+                {'id': 'other-model', 'max_context_length': 131072},
+                {
+                  'id': 'qwen3-8b',
+                  'max_context_length': 131072,
+                  'loaded_context_length': 16384,
+                },
+              ]
+            })),
+      ]);
+
+      final provider = LocalStructuringProvider(
+        transport: transport,
+        baseUrl: Uri.parse('http://192.168.1.50:1234'),
+        model: 'qwen3-8b',
+        flavor: LocalFlavor.lmStudio,
+      );
+
+      final result = await provider.test();
+      expect(provider.capabilities.contextWindowTokens, 16384,
+          reason: 'a 128k model loaded at 16k truncates at 16k, silently');
+      expect(result.contextWindowTokens, 16384,
+          reason: 'the caller saves this, so the answer outlives the test');
+    });
+
+    test('prefers the num_ctx Ollama is serving over the trained context',
+        () async {
+      final transport = RecordingTransport([
+        HttpReply(
+            200,
+            jsonEncode({
+              'data': [
+                {'id': 'llama3.1:8b'}
+              ]
+            })),
+        HttpReply(
+            200,
+            jsonEncode({
+              'parameters': 'stop "<|eot_id|>"\nnum_ctx 4096',
+              'model_info': {'llama.context_length': 131072},
+            })),
+      ]);
+
+      final provider = LocalStructuringProvider(
+        transport: transport,
+        baseUrl: Uri.parse('http://192.168.1.50:11434'),
+        model: 'llama3.1:8b',
+      );
+
+      await provider.test();
+      expect(provider.capabilities.contextWindowTokens, 4096,
+          reason: 'the trained context is an upper bound, not what is loaded, '
+              'and overstating it truncates the second half of the meeting');
+    });
+
+    test('a context window the user set beats whatever the server says',
+        () async {
+      final transport = RecordingTransport([
+        HttpReply(
+            200,
+            jsonEncode({
+              'data': [
+                {'id': 'llama3.1:8b'}
+              ]
+            })),
+        HttpReply(
+            200,
+            jsonEncode({
+              'model_info': {'llama.context_length': 8192},
+            })),
+      ]);
+
+      final provider = LocalStructuringProvider(
+        transport: transport,
+        baseUrl: Uri.parse('http://192.168.1.50:11434'),
+        model: 'llama3.1:8b',
+        declaredContextWindowTokens: 32768,
+      );
+
+      final result = await provider.test();
+      expect(provider.capabilities.contextWindowTokens, 32768,
+          reason: 'neither server reports the number reliably; the user does');
+      expect(result.summary, contains('33k context'));
+      expect(result.contextWindowTokens, 8192,
+          reason: 'what was read is still reported, so a later test can '
+              'offer it — it just does not override what was set');
     });
 
     test('a refused connection explains the three usual local causes',

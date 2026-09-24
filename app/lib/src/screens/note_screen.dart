@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -11,6 +12,7 @@ import '../data/repository.dart';
 import '../recording/recording_controller.dart';
 import 'package:intl/intl.dart';
 
+import 'board_view.dart';
 import 'export_sheet.dart';
 import 'calendar_view.dart';
 import 'gantt_entry_sheet.dart';
@@ -86,9 +88,22 @@ class _NoteView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final note = decodeNote(recording);
+    // Off, the chart is gone everywhere rather than just from the tab bar: a
+    // feature switch that leaves its buttons scattered through the notes has not
+    // been switched off, it has been hidden.
+    final gantt = ref.watch(settingsStoreProvider).workflowEnabled('ganttChart');
+
+    final tabs = <String>[
+      'Notes',
+      'Tasks',
+      if (gantt) 'Gantt',
+      'Calendar',
+      'Study',
+      'Transcript',
+    ];
 
     return DefaultTabController(
-      length: 5,
+      length: tabs.length,
       child: Scaffold(
         appBar: AppBar(
           title: Text(
@@ -114,28 +129,33 @@ class _NoteView extends ConsumerWidget {
               onPressed: () => _confirmDelete(context, ref),
             ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             isScrollable: true,
             tabAlignment: TabAlignment.start,
-            tabs: [
-              Tab(text: 'Notes'),
-              Tab(text: 'Gantt'),
-              Tab(text: 'Calendar'),
-              Tab(text: 'Study'),
-              Tab(text: 'Transcript'),
-            ],
+            tabs: [for (final tab in tabs) Tab(text: tab)],
           ),
         ),
         body: note == null
             ? const _NotStructuredYet()
             : LayoutBuilder(
                 builder: (context, constraints) {
-                  if (constraints.maxWidth >= 900) {
-                    return _TabletOverview(note: note, recording: recording);
-                  }
+                  // A wide screen has room to read the notes and the plan at once, so
+                  // the first tab becomes a split view there. Only the first: the wide
+                  // layout used to replace the whole TabBarView, which left the tab bar
+                  // rendered but inert — on a tablet, every tab after the first did
+                  // nothing at all when tapped.
+                  // A wide screen has room to read the notes and the plan at
+                  // once, so the first tab becomes a split view there — but only
+                  // when there is a plan to put beside them.
+                  final wide = constraints.maxWidth >= 900 && gantt;
                   return TabBarView(children: [
-                    _NotesTab(note: note, recording: recording),
-                    TimelineView(recordingId: recording.id, note: note),
+                    if (wide)
+                      _TabletOverview(note: note, recording: recording)
+                    else
+                      _NotesTab(note: note, recording: recording),
+                    BoardView(recordingId: recording.id, note: note),
+                    if (gantt)
+                      TimelineView(recordingId: recording.id, note: note),
                     CalendarView(recordingId: recording.id, note: note),
                     _StudyTab(note: note),
                     _TranscriptTab(note: note, recording: recording),
@@ -251,7 +271,10 @@ class _NotesTab extends ConsumerWidget {
                   // a line of notes into something the user keeps, and neither happens
                   // on its own. The chart asks for more than the Codex does only
                   // because a bar cannot be drawn without dates.
-                  IconButton(
+                  if (ref
+                      .watch(settingsStoreProvider)
+                      .workflowEnabled('ganttChart'))
+                    IconButton(
                     icon: const Icon(Icons.add_chart, size: 20),
                     tooltip: 'Add to Gantt',
                     visualDensity: VisualDensity.compact,
@@ -610,6 +633,11 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
   void _initPlayer() {
     final path = widget.recording.audioPath;
     if (path == null) return;
+    // just_audio ships implementations for Android, iOS and macOS only. On Linux and
+    // Windows, constructing the player reaches an unimplemented platform channel —
+    // so the tab that shows the transcript would fail on the way in, taking the
+    // readable transcript down with the playback nobody could have had anyway.
+    if (!audioPlaybackSupported()) return;
     final player = AudioPlayer();
     _player = player;
     _positionSub = player.positionStream.listen((position) {
@@ -746,54 +774,20 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
         .toSet()
         .toList();
     if (labels.isEmpty) return;
-    final controllers = {
-      for (final label in labels)
-        label: TextEditingController(text: _speakerNames[label] ?? label),
-    };
+
+    // Read before opening: the dialog should already know who has been named
+    // before rather than popping suggestions in after it is on screen.
+    final known = await ref.read(repositoryProvider).knownSpeakerNames();
+    if (!mounted) return;
+
     final names = await showDialog<Map<String, String>>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Name speakers'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final label in labels)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: TextField(
-                    controller: controllers[label],
-                    decoration: InputDecoration(labelText: label),
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(
-              context,
-              {
-                for (final label in labels)
-                  label: controllers[label]!.text.trim().isEmpty
-                      ? label
-                      : controllers[label]!.text.trim(),
-              },
-            ),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (context) => _NameSpeakersDialog(
+        labels: labels,
+        current: _speakerNames,
+        knownNames: known,
       ),
     );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      for (final controller in controllers.values) {
-        controller.dispose();
-      }
-    });
     if (names == null || !mounted) return;
     setState(() => _editedNames = names);
     await ref
@@ -843,6 +837,10 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
             ],
           ),
         ),
+        if (_player == null &&
+            widget.recording.audioPath != null &&
+            !audioPlaybackSupported())
+          _NoPlaybackHere(),
         if (_player != null)
           _PlaybackBar(
             position: _position,
@@ -1176,6 +1174,166 @@ class _Provenance extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+
+/// Names the voices in one recording, offering whoever has been named before.
+///
+/// Diarization labels are per-recording, so the same person is SPEAKER_01 in one
+/// meeting and SPEAKER_02 in the next. The suggestions are what makes that bearable —
+/// but they are only suggestions. Nothing is matched to a voice automatically: the app
+/// has no idea whether this SPEAKER_01 is the same person as last week's, and guessing
+/// would attribute decisions to people who never made them.
+class _NameSpeakersDialog extends StatefulWidget {
+  const _NameSpeakersDialog({
+    required this.labels,
+    required this.current,
+    required this.knownNames,
+  });
+
+  final List<String> labels;
+  final Map<String, String> current;
+  final List<String> knownNames;
+
+  @override
+  State<_NameSpeakersDialog> createState() => _NameSpeakersDialogState();
+}
+
+class _NameSpeakersDialogState extends State<_NameSpeakersDialog> {
+  late final Map<String, TextEditingController> _controllers = {
+    for (final label in widget.labels)
+      label: TextEditingController(text: widget.current[label] ?? label),
+  };
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Names still worth offering for [label].
+  ///
+  /// Excludes names already given to another voice — one person cannot be two of the
+  /// speakers in the same conversation — and the name this voice already has, where
+  /// the chip would do nothing but take up room.
+  List<String> _availableFor(String label) {
+    final taken = {
+      for (final entry in _controllers.entries) entry.value.text.trim(),
+    };
+    return [
+      for (final name in widget.knownNames)
+        if (!taken.contains(name)) name,
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Name speakers'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final label in widget.labels) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: TextField(
+                  controller: _controllers[label],
+                  textCapitalization: TextCapitalization.words,
+                  decoration: InputDecoration(labelText: label),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              if (_availableFor(label).isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final name in _availableFor(label).take(6))
+                        ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          label: Text(name, style: theme.textTheme.labelMedium),
+                          onPressed: () => setState(() {
+                            _controllers[label]!.text = name;
+                          }),
+                        ),
+                    ],
+                  ),
+                )
+              else
+                const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, {
+            for (final label in widget.labels)
+              label: _controllers[label]!.text.trim().isEmpty
+                  ? label
+                  : _controllers[label]!.text.trim(),
+          }),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+
+/// Whether audio playback has a platform implementation here.
+///
+/// just_audio covers Android, iOS and macOS; there is no Linux or Windows
+/// implementation, so an AudioPlayer built there throws on an unimplemented channel.
+///
+/// A replaceable function rather than a direct Platform check because `flutter test`
+/// runs on the host — usually Linux — so a hard check would mean the supported branch
+/// was never exercised by any test, on any machine, which is the branch every phone
+/// actually takes.
+bool Function() audioPlaybackSupported =
+    () => !Platform.isLinux && !Platform.isWindows;
+
+/// Says why there is no play button, rather than leaving a gap.
+///
+/// The audio is still on disk and still exported; only playing it back inside the app
+/// is missing. A user who recorded something and then cannot find the play control is
+/// owed that distinction.
+class _NoPlaybackHere extends StatelessWidget {
+  const _NoPlaybackHere();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+      child: Row(
+        children: [
+          Icon(Icons.volume_off_outlined,
+              size: 16, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Playback is not available on this platform yet. The recording is '
+              'still saved, and still exports.',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -8,14 +8,23 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:transcript_core/transcript_core.dart';
 
+import '../diagnostics/telemetry.dart';
+
 /// Captures audio to a WAV file and tracks loudness while it does.
 ///
 /// Always 16 kHz mono PCM16. Every speech-to-text engine resamples to that internally, so
 /// recording at 44.1 kHz stereo triples the upload for no accuracy gain: 32 kB/s, which is
 /// exactly the figure the chunk planner budgets with.
 class RecorderService {
-  RecorderService({AudioRecorder? recorder})
-      : _recorder = recorder ?? AudioRecorder();
+  RecorderService({AudioRecorder? recorder, DebugLog? debugLog})
+      : _recorder = recorder ?? AudioRecorder(),
+        _telemetry = RecorderTelemetry(
+          log: debugLog ?? DebugLog(),
+          monitor: AudioHealthMonitor(
+            sampleRate: config.sampleRate,
+            channels: config.numChannels,
+          ),
+        );
 
   static const RecordConfig config = RecordConfig(
     encoder: AudioEncoder.wav,
@@ -37,6 +46,10 @@ class RecorderService {
   static const double silenceThresholdDb = -38;
 
   final AudioRecorder _recorder;
+
+  /// Hardware telemetry. Inert unless Debug Mode is on — every call site below guards
+  /// on the log's own flag first, because this is the 10Hz path.
+  final RecorderTelemetry _telemetry;
 
   final _levels = StreamController<double>.broadcast();
   final List<Level> _history = [];
@@ -84,15 +97,62 @@ class RecorderService {
     );
     _history.clear();
 
-    await _recorder.start(config, path: _path!);
+    // An error boundary around the one call that talks to the hardware. The exception
+    // still propagates — the caller's handling of it is unchanged — but Debug Mode gets
+    // the format that was asked for alongside the failure, which is the pair that says
+    // whether the device refused the configuration or the microphone was simply busy.
+    try {
+      await _recorder.start(config, path: _path!);
+    } catch (e, stack) {
+      _telemetry.failed(e, stack, whileDoing: 'starting the capture');
+      rethrow;
+    }
     _startedAt = DateTime.now();
+    _telemetry.started(
+      sampleRate: config.sampleRate,
+      channels: config.numChannels,
+      path: _path,
+    );
 
     _amplitudeSubscription =
-        _recorder.onAmplitudeChanged(amplitudeInterval).listen((amplitude) {
-      final atMs = elapsed.inMilliseconds;
-      _history.add(Level(atMs, amplitude.current));
-      _levels.add(_normalise(amplitude.current));
-    });
+        _recorder.onAmplitudeChanged(amplitudeInterval).listen(
+      (amplitude) {
+        final atMs = elapsed.inMilliseconds;
+        _history.add(Level(atMs, amplitude.current));
+        _levels.add(_normalise(amplitude.current));
+
+        // Guarded rather than deferred through a closure: stat()ing the file ten times
+        // a second is precisely the overhead Debug Mode exists to avoid paying when it
+        // is off, and it would be paid building the argument.
+        if (_telemetry.log.isOn) {
+          _telemetry.observe(AudioSample(
+            elapsed: Duration(milliseconds: atMs),
+            amplitudeDb: amplitude.current,
+            bytesWritten: _bytesWritten(),
+          ));
+        }
+      },
+      onError: (Object e, StackTrace stack) =>
+          _telemetry.failed(e, stack, whileDoing: 'reading the level meter'),
+    );
+  }
+
+  /// Size of the file being written, or 0 if it cannot be read.
+  ///
+  /// Synchronous on purpose: this is called from inside the amplitude callback, where
+  /// an await would let the next tick overtake this one and put the health monitor's
+  /// samples out of order. Only ever reached with Debug Mode on.
+  static int _sizeOf(String path) {
+    try {
+      return File(path).lengthSync();
+    } on FileSystemException {
+      return 0;
+    }
+  }
+
+  int _bytesWritten() {
+    final path = _path;
+    return path == null ? 0 : _sizeOf(path);
   }
 
   /// Stops and returns what was captured, or null if nothing was.
@@ -105,6 +165,10 @@ class RecorderService {
 
     final path = await _recorder.stop();
     _startedAt = null;
+    _telemetry.stopped(
+      elapsed: duration,
+      bytes: path == null ? 0 : _sizeOf(path),
+    );
     if (path == null) return null;
 
     return CapturedAudio(

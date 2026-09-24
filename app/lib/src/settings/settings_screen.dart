@@ -11,6 +11,8 @@ import '../gemma/gemma_model_sheet.dart';
 import '../recording/recording_controller.dart';
 import '../screens/about_screen.dart';
 import '../screens/privacy_screen.dart';
+import '../screens/debug_log_screen.dart';
+import '../screens/health_screen.dart';
 import '../whisper/whisper_model_sheet.dart';
 import 'connection_test_controller.dart';
 import 'local_discovery_sheet.dart';
@@ -123,6 +125,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute<void>(builder: (_) => const PrivacyScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.monitor_heart_outlined),
+            title: const Text('Health'),
+            subtitle: const Text(
+              'Storage this app is using, and whether each configured service '
+              'is answering',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const HealthScreen()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.bug_report_outlined),
+            title: const Text('Debug mode'),
+            subtitle: const Text(
+              'Record a step-by-step log of what the app is doing, to find where '
+              'it breaks',
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const DebugLogScreen()),
             ),
           ),
           SwitchListTile.adaptive(
@@ -523,11 +549,20 @@ class _StageSectionState extends ConsumerState<_StageSection> {
               controller: _modelController,
               autocorrect: false,
               onChanged: (_) => unawaited(_persist()),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Model',
                 hintText: 'llama3.1:8b',
-                helperText: 'The model loaded in the server.',
-                border: OutlineInputBorder(),
+                helperText: _modelHelper(state),
+                border: const OutlineInputBorder(),
+                // Still typeable. A model can be valid before the server has it
+                // loaded, and a list is an offer, not a whitelist.
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.unfold_more),
+                  tooltip: 'Choose from this server',
+                  onPressed: _serverModels(state).isEmpty
+                      ? null
+                      : () => _pickServerModel(_serverModels(state)),
+                ),
               ),
             ),
           ),
@@ -633,6 +668,92 @@ class _StageSectionState extends ConsumerState<_StageSection> {
   Future<void> _selectModel(String model) async {
     setState(() => _modelController.text = model);
     await _persist();
+  }
+
+  /// What the server said it has, or empty before anyone has asked it.
+  static List<String> _serverModels(ConnectionTestState state) =>
+      state is ConnectionTestDone ? state.result.models : const [];
+
+  /// Says what to do next rather than restating the label.
+  ///
+  /// A local server's model names are not guessable — `llama3.1:8b-instruct-q5_K_M`
+  /// is not something anyone types from memory — so until the app has asked the
+  /// server, the useful instruction is to go and ask it.
+  String _modelHelper(ConnectionTestState state) {
+    final models = _serverModels(state);
+    if (models.isEmpty) {
+      return 'Test the connection to list what this server has loaded.';
+    }
+    final typed = _modelController.text.trim();
+    if (typed.isNotEmpty &&
+        !models.any((m) => m == typed || m.startsWith('$typed:'))) {
+      return '$typed is not among the ${models.length} this server reported.';
+    }
+    return '${models.length} model${models.length == 1 ? '' : 's'} on this '
+        'server — tap the arrows to choose.';
+  }
+
+  Future<void> _pickServerModel(List<String> models) async {
+    final chosen = await showDialog<String>(
+      context: context,
+      builder: (context) => _ServerModelDialog(
+        models: models,
+        selected: _modelController.text.trim(),
+      ),
+    );
+    if (chosen == null) return;
+    await _selectModel(chosen);
+  }
+}
+
+/// The models a local server reported, offered as a list.
+///
+/// A dialog rather than a dropdown: an Ollama install can hold dozens of tags, and a
+/// dropdown that long is unusable on a phone. Scrollable, searchable by eye, and the
+/// current choice is marked so a user who already typed one can see it is valid.
+class _ServerModelDialog extends StatelessWidget {
+  const _ServerModelDialog({required this.models, required this.selected});
+
+  final List<String> models;
+  final String selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Models on this server'),
+      content: SizedBox(
+        width: 420,
+        child: models.isEmpty
+            ? const Text('This server reported no models.')
+            : ListView.builder(
+                shrinkWrap: true,
+                itemCount: models.length,
+                itemBuilder: (context, i) {
+                  final model = models[i];
+                  final isSelected = model == selected;
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(
+                      isSelected
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      size: 18,
+                      color: isSelected ? theme.colorScheme.primary : null,
+                    ),
+                    title: Text(model, style: theme.textTheme.bodyMedium),
+                    onTap: () => Navigator.of(context).pop(model),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
   }
 }
 

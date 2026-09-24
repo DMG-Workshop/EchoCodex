@@ -46,6 +46,16 @@ enum ProviderKind {
     subtitle: 'Takes audio natively.',
     stages: {ProviderStage.transcription},
   ),
+  localWhisper(
+    id: 'local-whisper',
+    label: 'Whisper server (your network)',
+    subtitle: 'A Whisper server on your own machine, where a GPU can do in '
+        'seconds what a phone does in minutes.',
+    stages: {ProviderStage.transcription},
+    needsKey: false,
+    needsEndpoint: true,
+    isLocalNetwork: true,
+  ),
   anthropic(
     id: 'anthropic',
     label: 'Claude',
@@ -178,12 +188,15 @@ class ProviderFactory {
     WhisperEngine? whisperEngine,
     GemmaEngine? gemmaEngine,
     LiveTranscriptionSource Function()? liveSource,
-  })  : _whisperEngine = whisperEngine ?? NativeWhisperEngine(),
+  })  : _settings = settings,
+        _whisperEngine = whisperEngine ??
+            NativeWhisperEngine(threads: settings.whisperThreads),
         _gemmaEngine = gemmaEngine ?? OnDeviceGemmaEngine(settings),
         _liveSource = liveSource ?? OnDeviceSpeechSource.new;
 
   final HttpTransport _transport;
   final KeyStore _keys;
+  final SettingsStore _settings;
   final WhisperEngine _whisperEngine;
   final GemmaEngine _gemmaEngine;
 
@@ -242,6 +255,8 @@ class ProviderFactory {
               ? LocalFlavor.ollama
               : LocalFlavor.lmStudio,
           apiKey: key,
+          strictSchema: _settings.workflowEnabled('strictJsonSchema'),
+          declaredContextWindowTokens: _settings.localContextWindowTokens,
         ),
       ProviderKind.gemmaOnDevice =>
         GemmaStructuringProvider(engine: _gemmaEngine),
@@ -261,6 +276,18 @@ class ProviderFactory {
           apiKey: key!,
           model: selection.model ?? 'whisper-1',
         ),
+      // Speaks /v1/audio/transcriptions, which whisper.cpp's own server,
+      // faster-whisper-server and WhisperX all serve — so the OpenAI adapter reaches
+      // them unchanged, pointed at an address instead of a cloud. A key is optional
+      // because most people put no auth in front of their own box.
+      ProviderKind.localWhisper => selection.endpoint == null
+          ? null
+          : OpenAiTranscriptionProvider(
+              transport: _transport,
+              apiKey: key ?? '',
+              model: selection.model ?? 'whisper-1',
+              baseUrl: Uri.parse(selection.endpoint!),
+            ),
       ProviderKind.geminiAudio => GeminiTranscriptionProvider(
           transport: _transport,
           apiKey: key!,
@@ -329,6 +356,7 @@ class SettingsStore {
   static const _kModelPrefix = 'provider.model.';
   static const _kEndpointPrefix = 'provider.endpoint.';
   static const _kOnboarded = 'onboarding.completed';
+  static const _kDebugMode = 'diagnostics.debugMode';
   static const _kRecordingsDir = 'recordings.dirPath';
   static const _kWorkflowPrefix = 'workflow.';
   static const _kTemplateId = 'workflow.templateId';
@@ -362,6 +390,17 @@ class SettingsStore {
   bool get hasOnboarded => _prefs.getBool(_kOnboarded) ?? false;
 
   Future<void> setOnboarded() => _prefs.setBool(_kOnboarded, true);
+
+  /// Whether the verbose diagnostic log is recording.
+  ///
+  /// Off by default and persisted, so a user who turned it on to chase an intermittent
+  /// failure still has it on after the relaunch that failure caused. Read once at
+  /// startup and pushed into the logger; never consulted from a logging call site,
+  /// which is the whole reason the flag is affordable on the audio path.
+  bool get debugMode => _prefs.getBool(_kDebugMode) ?? false;
+
+  Future<void> setDebugMode(bool enabled) =>
+      _prefs.setBool(_kDebugMode, enabled);
 
   ProviderKind? kindFor(ProviderStage stage) {
     final id = _prefs.getString(
@@ -535,6 +574,57 @@ class SettingsStore {
 
   String get customVocabulary =>
       _prefs.getString('${_kWorkflowPrefix}vocabulary') ?? '';
+
+  /// Threads offline Whisper decodes with, or 0 for "work it out".
+  ///
+  /// Was fixed at the native default of 4 however many cores the device had, which on
+  /// an eight-core phone left half the machine idle and on a desktop far more than
+  /// that. Decoding is the slowest thing this app does on-device, and it scales close
+  /// to linearly here.
+  int get whisperThreads =>
+      _prefs.getInt('${_kWorkflowPrefix}whisperThreads') ?? 0;
+
+  Future<void> setWhisperThreads(int threads) =>
+      _prefs.setInt('${_kWorkflowPrefix}whisperThreads', threads.clamp(0, 32));
+
+  /// How much a local server can read at once, or 0 for "go by what it says".
+  ///
+  /// The number that decides how a long recording is written. Unknown means the pipeline
+  /// assumes something small and safe, which splits an hour of audio into a dozen sections
+  /// — correct, but far more work than a machine serving 32k needs to do. Neither Ollama
+  /// nor LM Studio reports it reliably, so testing the connection fills this in with
+  /// whatever it could read and the user can correct it.
+  ///
+  /// Too high is the dangerous direction: the server truncates the transcript and returns
+  /// a note that reads perfectly while covering only the first part of the meeting.
+  int get localContextWindowTokens =>
+      _prefs.getInt('${_kWorkflowPrefix}localContextWindow') ?? 0;
+
+  Future<void> setLocalContextWindowTokens(int tokens) => _prefs.setInt(
+      '${_kWorkflowPrefix}localContextWindow', tokens < 0 ? 0 : tokens);
+
+  /// The spelling list to send with a recording, or null when it should not be sent.
+  ///
+  /// The switch and the value live together here because the decision is one thing:
+  /// asking callers to remember to check the switch is how the switch came to be
+  /// ignored at all three call sites in the first place, leaving it saying "off" while
+  /// the list carried on reaching the model.
+  String? get vocabularyContext {
+    if (!workflowEnabled('customVocabulary')) return null;
+    final vocabulary = customVocabulary;
+    return vocabulary.isEmpty ? null : 'Custom vocabulary: $vocabulary';
+  }
+
+  /// The embedding model to index recordings with, on whichever server already
+  /// writes the notes. Empty means recall is not set up.
+  ///
+  /// Only the model is asked for, not a whole provider: a chat model has no embedding
+  /// endpoint, so the name genuinely differs, but the endpoint does not.
+  String get embeddingModel =>
+      _prefs.getString('${_kWorkflowPrefix}embeddingModel') ?? '';
+
+  Future<void> setEmbeddingModel(String model) =>
+      _prefs.setString('${_kWorkflowPrefix}embeddingModel', model.trim());
 
   Future<void> setCustomVocabulary(String vocabulary) =>
       _prefs.setString('${_kWorkflowPrefix}vocabulary', vocabulary.trim());

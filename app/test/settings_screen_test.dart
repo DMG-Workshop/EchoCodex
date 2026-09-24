@@ -205,6 +205,144 @@ void main() {
     expect(find.widgetWithText(TextField, 'API key'), findsNothing);
   });
 
+  group('a Whisper server on your own network', () {
+    testWidgets('it is offered as a way to transcribe', (tester) async {
+      await pumpSettings(tester, []);
+
+      expect(find.text('Whisper server (your network)'), findsOneWidget,
+          reason: 'the only local transcription options were on-device; a box '
+              'with a GPU does in seconds what a phone does in minutes');
+    });
+
+    testWidgets('it asks for an address, and adds no key field', (tester) async {
+      await pumpSettings(tester, []);
+      // The screen has two provider sections. The structuring one has its own key
+      // field, so counting before and after is the only honest way to ask whether
+      // THIS choice added one.
+      final keyFieldsBefore =
+          tester.widgetList(find.widgetWithText(TextField, 'API key')).length;
+
+      await tester.tap(find.text('Whisper server (your network)'));
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(TextField, 'Address'), findsWidgets);
+      expect(tester.widgetList(find.widgetWithText(TextField, 'API key')).length,
+          keyFieldsBefore,
+          reason: 'most people put no auth in front of their own machine');
+    });
+
+    testWidgets('a reachable server reports its models', (tester) async {
+      await pumpSettings(tester, [
+        HttpReply(
+          200,
+          jsonEncode({
+            'data': [
+              {'id': 'Systran/faster-whisper-large-v3'},
+              {'id': 'Systran/faster-whisper-small'},
+            ],
+          }),
+        ),
+      ]);
+
+      await tester.tap(find.text('Whisper server (your network)'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Address'), 'http://192.168.1.50:8000');
+      await tester.tap(find.text('Test connection').first);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Connected'), findsWidgets);
+    });
+  });
+
+  group('choosing a model on a local server', () {
+    /// Ollama, reached and reporting what it has pulled.
+    Future<void> connectOllama(WidgetTester tester,
+        {List<String> models = const [
+          'llama3.1:8b-instruct-q5_K_M',
+          'qwen2.5:7b',
+          'nomic-embed-text',
+        ]}) async {
+      await pumpSettings(tester, [
+        HttpReply(
+          200,
+          jsonEncode({'data': [for (final m in models) {'id': m}]}),
+        ),
+      ]);
+
+      await tester.tap(find.text('Ollama'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Address'),
+          'http://192.168.1.50:11434');
+      await tester.tap(find.text('Test connection').last);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('before testing, it says how to find out what is there',
+        (tester) async {
+      await pumpSettings(tester, []);
+      await tester.tap(find.text('Ollama'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Test the connection to list'), findsOneWidget,
+          reason: 'a local model name is not something anyone types from memory');
+
+      final button = tester.widget<IconButton>(
+          find.widgetWithIcon(IconButton, Icons.unfold_more));
+      expect(button.onPressed, isNull,
+          reason: 'nothing to choose from until the server has been asked');
+    });
+
+    testWidgets('after testing, the server\'s models can be chosen',
+        (tester) async {
+      await connectOllama(tester);
+
+      expect(find.textContaining('3 models on this server'), findsOneWidget);
+
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.unfold_more));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Models on this server'), findsOneWidget);
+      expect(find.text('llama3.1:8b-instruct-q5_K_M'), findsOneWidget);
+      expect(find.text('qwen2.5:7b'), findsOneWidget);
+    });
+
+    testWidgets('picking one fills the model field', (tester) async {
+      await connectOllama(tester);
+
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.unfold_more));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('qwen2.5:7b'));
+      await tester.pumpAndSettle();
+
+      final field =
+          tester.widget<TextField>(find.widgetWithText(TextField, 'Model'));
+      expect(field.controller?.text, 'qwen2.5:7b');
+    });
+
+    testWidgets('a model the server did not report is flagged, not blocked',
+        (tester) async {
+      await connectOllama(tester);
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Model'), 'mistral:latest');
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('is not among the 3'), findsOneWidget);
+      final field =
+          tester.widget<TextField>(find.widgetWithText(TextField, 'Model'));
+      expect(field.controller?.text, 'mistral:latest',
+          reason: 'a list is an offer, not a whitelist — a model can be valid '
+              'before the server has loaded it');
+    });
+
+    testWidgets('a single model reads as one, not "1 models"', (tester) async {
+      await connectOllama(tester, models: const ['qwen2.5:7b']);
+
+      expect(find.textContaining('1 model on this server'), findsOneWidget);
+    });
+  });
+
   testWidgets('an unreachable local server explains the usual causes',
       (tester) async {
     await pumpSettings(tester, [
@@ -417,14 +555,18 @@ void main() {
   });
 
   group('testing a keyless provider', () {
-    Future<ProviderFactory> factoryWith(LiveTranscriptionSource source) async {
-      final prefs = await SharedPreferences.getInstance();
-      return ProviderFactory(
-        RecordingTransport(const []),
-        InMemoryKeyStore(),
-        SettingsStore(prefs),
-        whisperEngine: _UnusedWhisperEngine(),
-        liveSource: () => source,
+    Future<ConnectionTestController> controllerWith(
+        LiveTranscriptionSource source) async {
+      final store = SettingsStore(await SharedPreferences.getInstance());
+      return ConnectionTestController(
+        ProviderFactory(
+          RecordingTransport(const []),
+          InMemoryKeyStore(),
+          store,
+          whisperEngine: _UnusedWhisperEngine(),
+          liveSource: () => source,
+        ),
+        store,
       );
     }
 
@@ -433,11 +575,9 @@ void main() {
       // provider that takes no key — the factory has no TranscriptionProvider for it
       // (it listens to the mic, so it is a LiveTranscriptionSource) and the null
       // branch assumed a missing key was the only way to get there.
-      final controller = ConnectionTestController(
-        await factoryWith(_FakeLiveSource(
-          ConnectionResult.success(summary: 'Ready · on-device · 3 languages'),
-        )),
-      );
+      final controller = await controllerWith(_FakeLiveSource(
+        ConnectionResult.success(summary: 'Ready · on-device · 3 languages'),
+      ));
 
       await controller.run(
         const ProviderSelection(kind: ProviderKind.onDeviceStt),
@@ -451,14 +591,12 @@ void main() {
 
     test('an unavailable recognizer reports why, without mentioning keys',
         () async {
-      final controller = ConnectionTestController(
-        await factoryWith(_FakeLiveSource(
-          ConnectionResult.failure(
-            summary: 'Speech recognition is unavailable on this device',
-            remedy: 'Check that dictation is enabled in system settings.',
-          ),
-        )),
-      );
+      final controller = await controllerWith(_FakeLiveSource(
+        ConnectionResult.failure(
+          summary: 'Speech recognition is unavailable on this device',
+          remedy: 'Check that dictation is enabled in system settings.',
+        ),
+      ));
 
       await controller.run(
         const ProviderSelection(kind: ProviderKind.onDeviceStt),
@@ -470,6 +608,109 @@ void main() {
       expect(state.result.summary, contains('unavailable'));
       expect(state.result.remedy, isNot(contains('key')),
           reason: 'nothing here takes a key');
+    });
+  });
+
+  group('how much a local server reads at once', () {
+    // The number that decides how a long recording gets written. Assumed small when
+    // unknown, which is safe and slow: an hour of audio becomes a dozen sections.
+    Future<(SettingsStore, ConnectionTestController)> tester(
+        List<Object> replies) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = SettingsStore(await SharedPreferences.getInstance());
+      final transport = RecordingTransport(replies);
+      return (
+        store,
+        ConnectionTestController(
+          ProviderFactory(
+            transport,
+            InMemoryKeyStore(),
+            store,
+            whisperEngine: _UnusedWhisperEngine(),
+          ),
+          store,
+        ),
+      );
+    }
+
+    const selection = ProviderSelection(
+      kind: ProviderKind.ollama,
+      endpoint: 'http://192.168.1.50:11434',
+      model: 'llama3.1:8b',
+    );
+
+    test('is remembered after a connection test, not just reported', () async {
+      final (store, controller) = await tester([
+        HttpReply(
+            200,
+            jsonEncode({
+              'data': [
+                {'id': 'llama3.1:8b'}
+              ]
+            })),
+        HttpReply(
+            200,
+            jsonEncode({
+              'model_info': {'llama.context_length': 16384},
+            })),
+      ]);
+
+      await controller.run(selection, ProviderStage.structuring);
+
+      expect(store.localContextWindowTokens, 16384,
+          reason: 'the adapter is rebuilt for every recording, so a number '
+              'kept only on the adapter is a number learned and thrown away');
+    });
+
+    test('a number the user chose is not overwritten by a test', () async {
+      final (store, controller) = await tester([
+        HttpReply(
+            200,
+            jsonEncode({
+              'data': [
+                {'id': 'llama3.1:8b'}
+              ]
+            })),
+        HttpReply(
+            200,
+            jsonEncode({
+              'model_info': {'llama.context_length': 131072},
+            })),
+      ]);
+      await store.setLocalContextWindowTokens(8192);
+
+      await controller.run(selection, ProviderStage.structuring);
+
+      expect(store.localContextWindowTokens, 8192,
+          reason: 'Ollama reports what the model was trained with, not what it '
+              'is serving; someone who corrected it meant it');
+    });
+
+    test('a failed test teaches nothing', () async {
+      final (store, controller) = await tester([
+        const TransportException(
+            TransportFailure.refused, 'Connection refused'),
+      ]);
+
+      await controller.run(selection, ProviderStage.structuring);
+
+      expect(store.localContextWindowTokens, 0);
+    });
+
+    test('reaches the provider that writes the notes', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = SettingsStore(await SharedPreferences.getInstance());
+      await store.setLocalContextWindowTokens(32768);
+
+      final provider = await ProviderFactory(
+        RecordingTransport(const []),
+        InMemoryKeyStore(),
+        store,
+        whisperEngine: _UnusedWhisperEngine(),
+      ).structuring(selection);
+
+      expect(provider!.capabilities.contextWindowTokens, 32768,
+          reason: 'a setting the pipeline never sees is not a setting');
     });
   });
 

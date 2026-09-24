@@ -209,7 +209,7 @@ void main() {
   });
 }
 
-class _CountingTransport implements HttpTransport {
+class _CountingTransport extends HttpTransport {
   _CountingTransport({required this.onStart, required this.onEnd});
 
   final void Function() onStart;

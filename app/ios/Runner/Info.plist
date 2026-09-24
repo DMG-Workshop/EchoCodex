@@ -89,7 +89,7 @@
 	     fails with a generic connection error and no prompt is ever shown, which is
 	     indistinguishable from the server being down. -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Transcript connects to a model running on your own computer so your recordings never leave your network.</string>
+	<string>Echo Codex connects to a model running on your own computer so your recordings never leave your network.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_http._tcp</string>

@@ -17,10 +17,29 @@ import 'file_model_store.dart';
 /// `transcript_core`'s own WAV builder, the same format its recorder
 /// produces) and deletes it once decoding finishes, win or lose.
 class NativeWhisperEngine implements WhisperEngine {
-  NativeWhisperEngine({FileModelStore? modelStore})
-      : _modelStore = modelStore ?? FileModelStore();
+  NativeWhisperEngine({FileModelStore? modelStore, int threads = 0})
+      : _modelStore = modelStore ?? FileModelStore(),
+        _threads = threads;
 
   final FileModelStore _modelStore;
+
+  /// 0 means work it out from the machine.
+  final int _threads;
+
+  /// How many threads to decode with.
+  ///
+  /// The native default is 4 whatever the device is, which leaves half an eight-core
+  /// phone and most of a desktop idle during the slowest thing this app does locally.
+  ///
+  /// One core is left free so the UI still draws and the recorder still writes — a
+  /// transcription that finishes fractionally sooner having frozen the app is not
+  /// faster from where the user sits. The cap is because whisper.cpp stops scaling
+  /// somewhere around eight threads on the model sizes this ships, and past that the
+  /// extra threads mostly generate heat.
+  int get threads {
+    if (_threads > 0) return _threads;
+    return (Platform.numberOfProcessors - 1).clamp(2, 8);
+  }
 
   @override
   Future<bool> isModelReady(String modelId) => _modelStore.isComplete(modelId);
@@ -41,6 +60,7 @@ class NativeWhisperEngine implements WhisperEngine {
         modelPath: modelPath,
         wavPath: wavFile.path,
         languageHint: languageHint,
+        threads: threads,
       );
       return segments
           .map(

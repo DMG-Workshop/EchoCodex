@@ -141,7 +141,32 @@ Rules:
 - Order sections chronologically by sourceRef.startMs.
 - Set meta.extractionConfidence to the LOWEST confidence among the inputs.
 
+- Every id in the output must be unique. Two sections that both numbered a task `t1` are
+  two different tasks; give them different ids and fix any dependsOn that pointed at them.
+
 Return one NoteDocument JSON object. No prose.''';
+
+  /// The whole-recording title and summary, from the section summaries alone.
+  ///
+  /// The merge pass this belongs to has already combined the sections, the roster and the
+  /// items without a model — see `stitchNoteDocuments`. Prose is the one part worth a
+  /// request, and this prompt is what makes that request small: a few hundred tokens of
+  /// section summaries instead of every partial document, so it fits whatever context the
+  /// user's server has, at any recording length.
+  static const String reduceMeta = '''
+You are writing the title and summary for one recording. You are given the summaries of its
+consecutive sections, in order.
+
+Rules:
+- title: six words or fewer, drawn from what was actually discussed. Never generic.
+- summary: 2-4 sentences covering the whole recording — what happened and what changed as a
+  result. Not a list of section summaries, and not a summary of the first section only.
+- recordingType and language: whatever fits the recording as a whole.
+- extractionConfidence: the LOWEST confidence among the sections.
+- Add nothing that is not in the section summaries you were given.
+
+Return one JSON object with exactly the properties title, summary, recordingType, language
+and extractionConfidence. No prose, no other properties.''';
 
   /// Sent as a follow-up turn on the same conversation. Deliberately never re-sends the
   /// transcript — a repair costs a few hundred tokens, not a full re-upload.

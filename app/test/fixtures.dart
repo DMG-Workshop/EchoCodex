@@ -333,6 +333,74 @@ class FakeRecordingRepository implements RecordingRepository {
   }
 
   @override
+  Future<List<String>> knownSpeakerNames({int limit = 12}) async {
+    final seen = <String>{};
+    final out = <String>[];
+    final rows = List.of(_rows)
+      ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+    for (final row in rows) {
+      final raw = row.speakerNamesJson;
+      if (raw == null || raw.isEmpty) continue;
+      Object? decoded;
+      try {
+        decoded = jsonDecode(raw);
+      } on FormatException {
+        continue;
+      }
+      if (decoded is! Map) continue;
+      for (final entry in decoded.entries) {
+        final name = '${entry.value}'.trim();
+        if (name.isEmpty || name == '${entry.key}') continue;
+        if (seen.add(name)) out.add(name);
+        if (out.length >= limit) return out;
+      }
+    }
+    return out;
+  }
+
+  /// The recall index, in memory. Same delete-then-insert semantics as the real one,
+  /// so a test that re-indexes sees the surplus go.
+  final Map<String, List<EmbeddedChunk>> recallByRecording = {};
+  String? lastEmbeddingModel;
+
+  @override
+  Future<void> saveRecallChunks(
+    String recordingId,
+    List<EmbeddedChunk> chunks, {
+    required String embeddingModel,
+  }) async {
+    lastEmbeddingModel = embeddingModel;
+    recallByRecording[recordingId] = List.of(chunks);
+  }
+
+  @override
+  Future<List<EmbeddedChunk>> recallCorpus({
+    required int dimensions,
+    required String embeddingModel,
+  }) async {
+    if (lastEmbeddingModel != null && lastEmbeddingModel != embeddingModel) {
+      return const [];
+    }
+    return [
+      for (final entries in recallByRecording.values)
+        for (final entry in entries)
+          if (entry.vector.length == dimensions) entry,
+    ];
+  }
+
+  @override
+  Future<(int, int)> recallCoverage() async {
+    final eligible = _rows.where((r) => r.transcriptText != null).toList();
+    return (
+      eligible.where((r) => recallByRecording.containsKey(r.id)).length,
+      eligible.length,
+    );
+  }
+
+  @override
+  Future<void> clearRecallIndex() async => recallByRecording.clear();
+
+  @override
   Future<db.Recording?> byId(String id) async =>
       _rows.where((r) => r.id == id).firstOrNull;
 

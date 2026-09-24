@@ -321,7 +321,11 @@ class ChunkQueue {
       attempts: attempt,
       nextAttemptAt: null,
     ));
-    _events.add(QueueStarted(chunk.index, attempt));
+    _events.add(QueueStarted(
+      chunk.index,
+      attempt,
+      audioMs: chunk.plan.endMs - chunk.plan.startMs,
+    ));
 
     try {
       final bytes = await audio.read(chunk.plan);
@@ -349,7 +353,7 @@ class ChunkQueue {
           attempts: attempt,
           error: e.toString(),
         ));
-        _events.add(QueueGaveUp(chunk.index, e.toString()));
+        _events.add(QueueGaveUp(chunk.index, e.toString(), cause: e));
         return;
       }
 
@@ -364,7 +368,7 @@ class ChunkQueue {
         nextAttemptAt: _now().add(delay),
         error: e.toString(),
       ));
-      _events.add(QueueRetrying(chunk.index, attempt, delay));
+      _events.add(QueueRetrying(chunk.index, attempt, delay, cause: e));
     }
   }
 
@@ -390,9 +394,14 @@ sealed class QueueEvent {
 }
 
 class QueueStarted extends QueueEvent {
-  const QueueStarted(this.index, this.attempt);
+  const QueueStarted(this.index, this.attempt, {this.audioMs});
   final int index;
   final int attempt;
+
+  /// How much audio this chunk covers. Carried on the event so a telemetry subscriber
+  /// can compare it against how long the request took without going back to the store
+  /// for something the queue already had in hand.
+  final int? audioMs;
 }
 
 class QueueSucceeded extends QueueEvent {
@@ -401,16 +410,26 @@ class QueueSucceeded extends QueueEvent {
 }
 
 class QueueRetrying extends QueueEvent {
-  const QueueRetrying(this.index, this.attempt, this.delay);
+  const QueueRetrying(this.index, this.attempt, this.delay, {this.cause});
+
+  /// The failure itself, not only its message.
+  ///
+  /// The string is what gets stored against the chunk and shown to the user; the object
+  /// is what lets a subscriber tell a timeout from a dropped connection from a 429.
+  /// Classifying by string-matching the message works until a provider rewords it.
+  final Object? cause;
   final int index;
   final int attempt;
   final Duration delay;
 }
 
 class QueueGaveUp extends QueueEvent {
-  const QueueGaveUp(this.index, this.reason);
+  const QueueGaveUp(this.index, this.reason, {this.cause});
   final int index;
   final String reason;
+
+  /// See [QueueRetrying.cause].
+  final Object? cause;
 }
 
 class QueueWaiting extends QueueEvent {

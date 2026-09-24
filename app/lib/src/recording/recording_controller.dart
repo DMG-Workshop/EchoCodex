@@ -8,6 +8,8 @@ import 'package:transcript_core/transcript_core.dart';
 import '../data/chunk_store.dart';
 import '../data/database.dart';
 import '../data/repository.dart';
+import '../diagnostics/debug_mode.dart';
+import '../diagnostics/telemetry.dart';
 import '../settings/provider_config.dart';
 import 'audio_import.dart';
 import 'background_audio.dart';
@@ -83,7 +85,9 @@ class RecordingController extends StateNotifier<RecordState> {
     AudioImportService importer = const AudioImportService(),
     DeviceAudioCapture deviceCapture = const DeviceAudioCapture(),
     this.interruptions = const InterruptionPolicy(),
-  })  : _recorder = recorder,
+    DebugLog? debugLog,
+  })  : _debugLog = debugLog ?? DebugLog(),
+        _recorder = recorder,
         _deviceCapture = deviceCapture,
         _repository = repository,
         _factory = factory,
@@ -98,6 +102,15 @@ class RecordingController extends StateNotifier<RecordState> {
   final ProviderFactory _factory;
   final SettingsStore _settings;
   final TranscriptDatabase _db;
+
+  /// Debug Mode's logger. Inert by default, so nothing here changes for a test or for
+  /// a user who never turns it on.
+  final DebugLog _debugLog;
+
+  /// Telemetry for the queue currently being drained. One at a time: pipelines are
+  /// built and drained one recording at a time, and attaching a fresh subscriber
+  /// replaces the previous one rather than accumulating listeners across a backlog.
+  QueueTelemetry? _queueTelemetry;
   final BackgroundAudio _background;
   final AudioImportService _importer;
   final DeviceAudioCapture _deviceCapture;
@@ -223,9 +236,7 @@ class RecordingController extends StateNotifier<RecordState> {
         silences: const [],
         referenceDate: _isoDate(DateTime.now()),
         timeZone: DateTime.now().timeZoneName,
-        userContext: _settings.customVocabulary.isEmpty
-            ? null
-            : 'Custom vocabulary: ${_settings.customVocabulary}',
+        userContext: _settings.vocabularyContext,
         templateInstructions: templateInstructions,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
         flashcardLimit: _flashcardLimit,
@@ -429,9 +440,7 @@ class RecordingController extends StateNotifier<RecordState> {
         silences: captured.silences,
         referenceDate: _isoDate(DateTime.now()),
         timeZone: DateTime.now().timeZoneName,
-        userContext: _settings.customVocabulary.isEmpty
-            ? null
-            : 'Custom vocabulary: ${_settings.customVocabulary}',
+        userContext: _settings.vocabularyContext,
         templateInstructions: templateInstructions,
         additionalGaps: interruptionGaps,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
@@ -523,9 +532,7 @@ class RecordingController extends StateNotifier<RecordState> {
         silences: const [],
         referenceDate: _isoDate(DateTime.now()),
         timeZone: DateTime.now().timeZoneName,
-        userContext: _settings.customVocabulary.isEmpty
-            ? null
-            : 'Custom vocabulary: ${_settings.customVocabulary}',
+        userContext: _settings.vocabularyContext,
         templateInstructions: templateInstructions,
         keyConceptsEnabled: _settings.workflowEnabled('smartSummaries'),
         flashcardLimit: _flashcardLimit,
@@ -591,17 +598,35 @@ class RecordingController extends StateNotifier<RecordState> {
     _Providers providers,
     String audioPath, {
     String? languageOverride,
-  }) =>
-      DurableRecordingPipeline(
-        queue: ChunkQueue(
-          store: DriftChunkStore(_db),
-          transcription: providers.transcription,
-          audio: WavChunkReader(File(audioPath)),
-          languageHint: languageOverride ?? _languageHint,
-          speakerLabels: _settings.workflowEnabled('speakerLabels'),
-        ),
-        structuring: StructuringPipeline(provider: providers.structuring),
-      );
+    String? recordingId,
+  }) {
+    final queue = ChunkQueue(
+      store: DriftChunkStore(_db),
+      transcription: providers.transcription,
+      audio: WavChunkReader(File(audioPath)),
+      languageHint: languageOverride ?? _languageHint,
+      speakerLabels: _settings.workflowEnabled('speakerLabels'),
+    );
+
+    // Subscribing to the queue's own event stream rather than threading a logger
+    // through the pipeline: transcript_core stays free of a logging dependency, and
+    // when Debug Mode is off nothing subscribes at all.
+    if (_debugLog.isOn) {
+      unawaited(_queueTelemetry?.dispose());
+      final telemetry = QueueTelemetry(log: _debugLog);
+      telemetry.watch(queue.events, recordingId: recordingId ?? 'unknown');
+      _queueTelemetry = telemetry;
+    }
+
+    return DurableRecordingPipeline(
+      queue: queue,
+      structuring: StructuringPipeline(
+        provider: providers.structuring,
+        // Null when Debug Mode is off, so the pipeline does not even build the events.
+        onEvent: StructuringTelemetry(log: _debugLog).listener,
+      ),
+    );
+  }
 
   Future<String?> _activeTemplateInstructions() async {
     final id = _settings.activeTemplateId;
@@ -797,7 +822,7 @@ final reminderServiceProvider = Provider<ReminderService>(
 );
 
 final recorderProvider = Provider<RecorderService>((ref) {
-  final recorder = RecorderService();
+  final recorder = RecorderService(debugLog: ref.watch(debugLogProvider));
   ref.onDispose(recorder.dispose);
   return recorder;
 });
@@ -867,5 +892,6 @@ final recordingControllerProvider =
     settings: ref.watch(settingsStoreProvider),
     database: ref.watch(databaseProvider),
     background: ref.watch(backgroundAudioProvider),
+    debugLog: ref.watch(debugLogProvider),
   ),
 );

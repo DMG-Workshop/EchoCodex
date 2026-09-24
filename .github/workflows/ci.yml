@@ -100,3 +100,74 @@ jobs:
       # Simulator, not device: --no-codesign skips signing but still targets a
       # device, which needs a Development Team no hosted runner has.
       - run: flutter build ios --debug --simulator
+
+  # The three desktop targets were never built here, which is how the macOS release
+  # build shipped with only the sandbox entitlement — no microphone, no outgoing
+  # network, no file access — for as long as it did. A build is the cheapest check
+  # that a platform's configuration is still coherent.
+  macos:
+    name: macOS build
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter config --enable-macos-desktop
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build macos --debug
+      # The entitlements are the part a build alone would not catch: a missing one
+      # fails at runtime on a user's machine, not at compile time.
+      - name: the release build can record, reach the network and open files
+        run: |
+          set -euo pipefail
+          ents=macos/Runner/Release.entitlements
+          for key in \
+            com.apple.security.device.audio-input \
+            com.apple.security.network.client \
+            com.apple.security.files.user-selected.read-write
+          do
+            /usr/libexec/PlistBuddy -c "Print :$key" "$ents" >/dev/null \
+              || { echo "::error file=app/$ents::$key is missing — the sandboxed app cannot do its job without it"; exit 1; }
+          done
+
+  linux:
+    name: Linux build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libasound2-dev
+      - run: flutter config --enable-linux-desktop
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build linux --debug
+
+  windows:
+    name: Windows build
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build windows --debug

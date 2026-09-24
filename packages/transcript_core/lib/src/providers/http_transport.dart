@@ -11,6 +11,111 @@ import 'dart:typed_data' show BytesBuilder;
 /// the exact bytes each adapter puts on the wire, with no network involved.
 abstract class HttpTransport {
   Future<HttpReply> send(HttpCall call);
+
+  /// Sends [call] and yields the response body as it arrives.
+  ///
+  /// Exists for one specific reason: a non-streaming completion from a local model
+  /// sends no bytes at all until the whole thing is generated, so any deadline on the
+  /// response becomes a deadline on total generation time. On a CPU-bound server
+  /// producing grammar-constrained JSON that is minutes, and the request dies with a
+  /// timeout while the model is working perfectly well.
+  ///
+  /// Streaming turns that into a liveness question instead: bytes arrive continuously,
+  /// so the only thing worth failing on is the model going quiet. [idleTimeout] is that
+  /// check, and it has to live here because no HTTP client applies one to a body
+  /// stream — they time the headers and then wait forever.
+  ///
+  /// Default implementation falls back to [send] and yields the body in one piece, so
+  /// a transport that cannot stream still works and simply keeps the old behaviour.
+  Stream<String> sendStreaming(
+    HttpCall call, {
+    Duration idleTimeout = const Duration(seconds: 120),
+  }) async* {
+    final reply = await send(call);
+    if (!reply.ok) {
+      throw TransportException(
+        TransportFailure.other,
+        'HTTP ${reply.statusCode}: ${reply.body}',
+      );
+    }
+    yield reply.body;
+  }
+}
+
+/// Reassembles an OpenAI-style `text/event-stream` into the text it carries.
+///
+/// Tolerant on purpose. Chunk boundaries fall wherever TCP puts them, so a `data:`
+/// line routinely arrives in two pieces, and servers differ on whether they send
+/// `[DONE]`, keep-alive comments, or blank lines between events. Anything unparseable
+/// is skipped rather than thrown: losing one malformed frame costs a few tokens, while
+/// throwing loses a generation that may have taken minutes.
+class SseAccumulator {
+  final StringBuffer _pending = StringBuffer();
+
+  /// Feeds a raw chunk and returns whatever complete text it completed.
+  String add(String chunk) {
+    _pending.write(chunk);
+    final buffered = _pending.toString();
+
+    // Keep the trailing partial line for the next chunk.
+    final lastBreak = buffered.lastIndexOf('\n');
+    if (lastBreak == -1) return '';
+    final ready = buffered.substring(0, lastBreak);
+    _pending
+      ..clear()
+      ..write(buffered.substring(lastBreak + 1));
+
+    final out = StringBuffer();
+    for (final line in ready.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty || trimmed.startsWith(':')) continue;
+      if (!trimmed.startsWith('data:')) continue;
+      final payload = trimmed.substring(5).trim();
+      if (payload.isEmpty || payload == '[DONE]') continue;
+      out.write(_textOf(payload));
+    }
+    return out.toString();
+  }
+
+  /// Whatever is left once the stream ends.
+  String flush() {
+    final rest = _pending.toString().trim();
+    _pending.clear();
+    if (!rest.startsWith('data:')) return '';
+    final payload = rest.substring(5).trim();
+    if (payload.isEmpty || payload == '[DONE]') return '';
+    return _textOf(payload);
+  }
+
+  static String _textOf(String payload) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(payload);
+    } on FormatException {
+      return '';
+    }
+    if (decoded is! Map) return '';
+
+    // Chat completions put it under choices[].delta.content; the older completions
+    // shape uses choices[].text; Ollama's native stream uses message.content.
+    final choices = decoded['choices'];
+    if (choices is List && choices.isNotEmpty) {
+      final first = choices.first;
+      if (first is Map) {
+        final delta = first['delta'];
+        if (delta is Map && delta['content'] is String) {
+          return delta['content'] as String;
+        }
+        if (first['text'] is String) return first['text'] as String;
+      }
+    }
+    final message = decoded['message'];
+    if (message is Map && message['content'] is String) {
+      return message['content'] as String;
+    }
+    if (decoded['response'] is String) return decoded['response'] as String;
+    return '';
+  }
 }
 
 class HttpCall {
@@ -116,7 +221,7 @@ enum TransportFailure {
 }
 
 /// Default `dart:io` transport. Used by tests and the CLI; the app supplies its own.
-class IoHttpTransport implements HttpTransport {
+class IoHttpTransport extends HttpTransport {
   IoHttpTransport({HttpClient? client}) : _client = client ?? HttpClient();
 
   final HttpClient _client;
@@ -165,7 +270,7 @@ class IoHttpTransport implements HttpTransport {
 }
 
 /// Test double. Records every call and replays queued replies in order.
-class RecordingTransport implements HttpTransport {
+class RecordingTransport extends HttpTransport {
   RecordingTransport(this._replies);
 
   /// Convenience for the common single-reply case.
@@ -231,7 +336,7 @@ class MultipartBody {
 /// [RecordingTransport] replays a queue, which cannot express "these ten probes go out
 /// at once and three of them answer". Discovery needs exactly that, so this fake matches
 /// on a substring of the request URL and lets everything else fail as unreachable.
-class RoutingTransport implements HttpTransport {
+class RoutingTransport extends HttpTransport {
   RoutingTransport(this.routes, {this.latency = Duration.zero});
 
   /// URL substring -> reply. First match wins, so put the more specific route first.
