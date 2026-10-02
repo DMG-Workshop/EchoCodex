@@ -56,6 +56,30 @@ class DurableRecordingPipeline {
     );
   }
 
+  /// Plans and records the chunks, then stops — nothing is transcribed and no model is
+  /// called.
+  ///
+  /// This is what makes "record now, notes later" possible. Capture is cheap and runs in
+  /// real time; transcription and structuring are the slow part, and on a phone with a
+  /// local model they can take longer than the meeting did. Coupling the two means the
+  /// person who just finished a meeting stands still watching a progress bar, on a device
+  /// that is probably about to go in a pocket.
+  ///
+  /// Afterwards the recording is in exactly the state an interrupted one is in, which is
+  /// the point: [resume] already knows how to finish it, has always been called at launch
+  /// for anything left over, and needed no changes to handle this.
+  Future<void> prepare({
+    required String recordingId,
+    required int totalDurationMs,
+    required List<SilenceWindow> silences,
+  }) async {
+    final config = chunkerConfig
+        .forProvider(queue.transcription.capabilities.maxRequestBytes);
+    final plan = ChunkPlanner(config)
+        .plan(totalDurationMs: totalDurationMs, silences: silences);
+    await queue.enqueue(recordingId, plan);
+  }
+
   /// Picks up a recording whose chunks are already planned.
   ///
   /// Called at launch for anything left unfinished. The user does not have to know the

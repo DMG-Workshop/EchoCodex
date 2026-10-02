@@ -163,4 +163,52 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('record now, notes later', () {
+    testWidgets('says it is saved before it says anything else', (tester) async {
+      await pump(
+        tester,
+        const RecordSaved('r1', duration: Duration(minutes: 67, seconds: 12)),
+      );
+
+      expect(find.textContaining('Saved'), findsOneWidget);
+      expect(find.textContaining('1:07:12'), findsOneWidget,
+          reason: 'someone who just recorded an hour of a meeting needs to see '
+              'that the hour is there');
+    });
+
+    testWidgets('explains that the app can be closed', (tester) async {
+      await pump(
+        tester,
+        const RecordSaved('r1', duration: Duration(minutes: 5)),
+      );
+
+      expect(find.textContaining('close the app'), findsOneWidget);
+      expect(find.textContaining('notification'), findsOneWidget,
+          reason: 'deferring only helps if they are told when it is done');
+    });
+
+    testWidgets('offers to write them now, and to open the recording',
+        (tester) async {
+      await pump(
+        tester,
+        const RecordSaved('r1', duration: Duration(minutes: 5)),
+      );
+
+      expect(find.text('Write the notes now'), findsOneWidget);
+      expect(find.text('Open the recording'), findsOneWidget,
+          reason: 'the audio is there and playable before any note exists');
+    });
+
+    testWidgets('a storage warning still reaches the user', (tester) async {
+      await pump(
+        tester,
+        const RecordSaved('r1',
+            duration: Duration(minutes: 5), warning: 'Storage is nearly full'),
+      );
+
+      expect(find.text('Storage is nearly full'), findsOneWidget,
+          reason: 'the quiet path must not be where a warning goes missing');
+    });
+  });
 }

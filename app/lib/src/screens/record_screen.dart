@@ -457,6 +457,7 @@ class RecordBody extends StatelessWidget {
         // Navigation to the note happens in a listener; the pane behind it returns to
         // rest so a second recording can start immediately.
         RecordDone() => const _IdlePane(),
+        final RecordSaved s => _SavedPane(state: s),
         final RecordError s => _ErrorPane(state: s),
       };
 }
@@ -689,6 +690,70 @@ class _ErrorPane extends ConsumerWidget {
                 child: const Text('Open the transcript'),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Recorded and safe, with the notes still to be written.
+///
+/// Says that it is saved before it says anything else. Someone who has just recorded an
+/// hour of a meeting and sees no notes needs the reassurance first, and the offer to
+/// write them now second.
+class _SavedPane extends ConsumerWidget {
+  const _SavedPane({required this.state});
+
+  final RecordSaved state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_outline,
+                size: 44, color: theme.colorScheme.primary),
+            const SizedBox(height: 16),
+            Text('Saved · ${formatDuration(state.duration)}',
+                style: theme.textTheme.titleMedium),
+            const SizedBox(height: 10),
+            Text(
+              'The notes have not been written yet. Start them whenever suits — '
+              'you can close the app, and a notification will tell you when '
+              'they are ready.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            if (state.warning != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                state.warning!,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 20),
+            FilledButton(
+              onPressed: () => ref
+                  .read(recordingControllerProvider.notifier)
+                  .resumeRecording(state.recordingId),
+              child: const Text('Write the notes now'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => NoteScreen(recordingId: state.recordingId),
+                ),
+              ),
+              child: const Text('Open the recording'),
+            ),
           ],
         ),
       ),

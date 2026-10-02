@@ -79,5 +79,30 @@ class ReminderService {
     );
   }
 
+  /// Says the notes for a recording are written, now, rather than at a scheduled time.
+  ///
+  /// The other half of "record now, notes later": deferring the work is only an
+  /// improvement if the person does not have to keep checking. [title] is the note's own
+  /// title, so the notification says which recording finished — someone who queued three
+  /// in a morning should not have to open the app to find out.
+  Future<void> notesReady({required String id, required String title}) =>
+      _plugin.show(
+        'notes:$id'.hashCode,
+        'Your notes are ready',
+        title,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'notes_ready',
+            'Finished notes',
+            channelDescription:
+                'Tells you when the notes for a recording have been written.',
+            importance: Importance.defaultImportance,
+          ),
+          iOS: DarwinNotificationDetails(),
+          linux: LinuxNotificationDetails(),
+        ),
+        payload: 'note:$id',
+      );
+
   Future<void> cancel(String id) => _plugin.cancel(id.hashCode);
 }

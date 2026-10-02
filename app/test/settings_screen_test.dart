@@ -611,6 +611,28 @@ void main() {
     });
   });
 
+  group('record now, notes later', () {
+    test('is on by default, because the wait was never necessary', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = SettingsStore(await SharedPreferences.getInstance());
+
+      expect(store.notesLater, isTrue);
+    });
+
+    test('can be turned off by someone who wants to watch it happen',
+        () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = SettingsStore(await SharedPreferences.getInstance());
+
+      await store.setNotesLater(false);
+
+      expect(store.notesLater, isFalse);
+      expect(store.workflowEnabled('notesLater'), isFalse,
+          reason: 'the named accessor and the workflow key are one setting, '
+              'not two that can disagree');
+    });
+  });
+
   group('how much a local server reads at once', () {
     // The number that decides how a long recording gets written. Assumed small when
     // unknown, which is safe and slow: an hour of audio becomes a dozen sections.
