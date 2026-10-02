@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:echo_codex_app/src/data/database.dart' as db;
 import 'package:echo_codex_app/src/recording/recording_controller.dart';
+import 'package:echo_codex_app/src/recording/desktop_playback.dart';
 import 'package:echo_codex_app/src/screens/note_screen.dart';
 import 'package:echo_codex_app/src/settings/provider_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -161,27 +161,27 @@ void main() {
     expect(find.textContaining('Alice: Hello there'), findsOneWidget);
   });
 
-  group('playback where just_audio has no implementation', () {
-    tearDown(() {
-      audioPlaybackSupported = () => !Platform.isLinux && !Platform.isWindows;
-    });
+  group('playback where it cannot work', () {
+    final original = audioPlaybackUnavailable;
+    tearDown(() => audioPlaybackUnavailable = original);
 
     testWidgets('says why there is no play button instead of leaving a gap',
         (tester) async {
-      audioPlaybackSupported = () => false;
+      audioPlaybackUnavailable =
+          () => 'needs libmpv, which is not installed. The recording is still '
+              'saved, and still exports.';
       await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
       await tester.tap(find.text('Transcript'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('not available on this platform'),
-          findsOneWidget);
+      expect(find.textContaining('needs libmpv'), findsOneWidget);
       expect(find.textContaining('still saved'), findsOneWidget,
           reason: 'the audio is on disk and still exports — a user who cannot '
               'find the play control is owed that distinction');
     });
 
     testWidgets('the transcript itself still opens and reads', (tester) async {
-      audioPlaybackSupported = () => false;
+      audioPlaybackUnavailable = () => 'no player here';
       await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
       await tester.tap(find.text('Transcript'));
       await tester.pumpAndSettle();
@@ -194,12 +194,26 @@ void main() {
 
     testWidgets('where playback works, nothing apologises for it',
         (tester) async {
-      audioPlaybackSupported = () => true;
+      audioPlaybackUnavailable = () => null;
       await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
       await tester.tap(find.text('Transcript'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('not available on this platform'), findsNothing);
+      expect(find.byType(Icon).evaluate().map((e) => (e.widget as Icon).icon),
+          isNot(contains(Icons.volume_off_outlined)),
+          reason: 'the apology is keyed off the seam, not off the platform');
+    });
+
+    testWidgets('the reason the seam gives is the reason shown, verbatim',
+        (tester) async {
+      audioPlaybackUnavailable = () => 'a very specific explanation';
+      await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('a very specific explanation'), findsOneWidget,
+          reason: 'the widget must not second-guess or reword the diagnosis — '
+              'it has no platform knowledge to do it with');
     });
   });
 

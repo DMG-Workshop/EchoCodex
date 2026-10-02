@@ -9,6 +9,7 @@ import 'src/desktop/desktop_shell.dart';
 import 'src/onboarding/onboarding_screen.dart';
 import 'src/privacy/crash_log.dart';
 import 'src/diagnostics/debug_mode.dart';
+import 'src/recording/desktop_playback.dart';
 import 'src/recording/recording_controller.dart';
 import 'src/recording/reminder_service.dart';
 import 'src/screens/record_screen.dart';
@@ -30,6 +31,11 @@ Future<void> main() async {
   if (DesktopShell.isSupported) {
     await windowManager.ensureInitialized();
   }
+
+  // Gives Linux and Windows a just_audio implementation, and records whether it took.
+  // On Linux it depends on a system libmpv, so this is a question with two answers and
+  // the Transcript tab reads the one it got.
+  await initializeDesktopPlayback();
 
   // Registers the LiteRT-LM engine so a `.litertlm` file picked in settings can be
   // loaded — this call only wires up the Dart-side registry, it does not touch the

@@ -76,7 +76,7 @@ the Gantt renderer twice or writing it in Compose canvas anyway.
 | Audio capture | `record` (^6) | PCM16 file **and** `startStream()`. Only package with clean streaming on both platforms. |
 | Background recording | `flutter_foreground_task` (Android) + native `AVAudioSession` channel (iOS) | Not optional; see §2.4. |
 | Waveform / levels | `audio_waveforms` | Live amplitude — the recording screen's only job is to prove it's listening. |
-| Playback + scrub | `just_audio` | Position stream drives transcript highlighting. |
+| Playback + scrub | `just_audio`, plus `just_audio_media_kit` on Linux and Windows | Position stream drives transcript highlighting. just_audio has no desktop implementation of its own; media_kit backs the same API with libmpv, which is bundled on Windows and a system package on Linux. |
 | On-device STT | `speech_to_text` | Wraps `SFSpeechRecognizer` / Android `SpeechRecognizer`. Free, no key. Caveats in §3.1. |
 | Local Whisper | `whisper_ggml`, or `dart:ffi` → whisper.cpp | True offline. +40–150 MB per model. Phase 5. |
 | HTTP | `dio` | Interceptors, `CancelToken`, streamed responses, per-provider retry policy. |
