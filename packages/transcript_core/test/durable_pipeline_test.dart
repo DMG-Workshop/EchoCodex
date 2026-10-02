@@ -342,6 +342,112 @@ void main() {
       expect(bytes, lessThanOrEqualTo(1024 * 1024));
     }
   });
+
+  group('record now, notes later', () {
+    // Capture is real time and nearly free; transcribing and structuring are minutes.
+    // prepare() is what lets the second half happen when it suits rather than while
+    // someone stands holding their phone.
+    test('saves the work without transcribing a thing', () async {
+      final store = MemoryStore();
+      final speech = Speech();
+      final structuring = FakeStructuringProvider(
+        response: jsonEncode(validNoteJson()),
+      );
+
+      await DurableRecordingPipeline(
+        queue: ChunkQueue(
+          store: store,
+          transcription: speech,
+          audio: StubAudio(),
+          policy: const RetryPolicy(base: Duration(milliseconds: 1)),
+        ),
+        structuring: StructuringPipeline(provider: structuring),
+      ).prepare(
+        recordingId: 'r1',
+        totalDurationMs: 150000,
+        silences: const [],
+      );
+
+      expect(speech.calls, 0, reason: 'nothing may be sent anywhere yet');
+      expect(structuring.requests, isEmpty,
+          reason: 'and no model may be called');
+      expect(await store.forRecording('r1'), isNotEmpty,
+          reason:
+              'but the plan is written down, or it cannot be finished later');
+    });
+
+    test('leaves it in the state resume already knows how to finish', () async {
+      final store = MemoryStore();
+      final speech = Speech();
+      final pipeline = pipelineOf(store, speech);
+
+      await pipeline.prepare(
+        recordingId: 'r1',
+        totalDurationMs: 150000,
+        silences: const [],
+      );
+      final events = await collect(pipeline.resume(
+        recordingId: 'r1',
+        referenceDate: '2026-10-02',
+        timeZone: 'UTC',
+      ));
+
+      expect(events.whereType<PipelineComplete>(), hasLength(1),
+          reason: 'deferring must not cost the note, only the wait');
+      expect(speech.calls, greaterThan(0));
+      final complete = events.whereType<PipelineComplete>().single;
+      expect(complete.transcript.segments, isNotEmpty);
+    });
+
+    test('transcribes exactly the chunks it planned, once', () async {
+      final store = MemoryStore();
+      final speech = Speech();
+      final pipeline = pipelineOf(store, speech);
+
+      await pipeline.prepare(
+        recordingId: 'r1',
+        totalDurationMs: 300000,
+        silences: const [],
+      );
+      final planned = (await store.forRecording('r1')).length;
+      await collect(pipeline.resume(
+        recordingId: 'r1',
+        referenceDate: '2026-10-02',
+        timeZone: 'UTC',
+      ));
+
+      expect(speech.calls, planned,
+          reason:
+              'a deferred recording must not be transcribed twice, which is '
+              'what paying for it twice would look like on a cloud provider');
+    });
+
+    test('plans the same chunks start() would have', () async {
+      final deferred = MemoryStore();
+      final immediate = MemoryStore();
+
+      await pipelineOf(deferred, Speech()).prepare(
+        recordingId: 'r1',
+        totalDurationMs: 300000,
+        silences: const [],
+      );
+      await collect(pipelineOf(immediate, Speech()).start(
+        recordingId: 'r1',
+        totalDurationMs: 300000,
+        silences: const [],
+        referenceDate: '2026-10-02',
+        timeZone: 'UTC',
+      ));
+
+      expect(
+        (await deferred.forRecording('r1'))
+            .map((c) => '${c.index}:${c.startMs}-${c.endMs}'),
+        (await immediate.forRecording('r1'))
+            .map((c) => '${c.index}:${c.startMs}-${c.endMs}'),
+        reason: 'deferring changes when the work happens, not what the work is',
+      );
+    });
+  });
 }
 
 class _SmallRequest extends Speech {

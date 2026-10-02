@@ -587,6 +587,18 @@ class SettingsStore {
   Future<void> setWhisperThreads(int threads) =>
       _prefs.setInt('${_kWorkflowPrefix}whisperThreads', threads.clamp(0, 32));
 
+  /// Whether to stop after recording and write the notes later.
+  ///
+  /// Defaults on. Capture is real-time and nearly free; transcribing and structuring are
+  /// minutes, and on a phone decoding its own audio they can outlast the meeting. Holding
+  /// someone at a progress bar for that is the wrong default on a device that is about to
+  /// go in a pocket — and it is the one part of the wait that was never necessary, because
+  /// the queue has always been durable enough to finish later.
+  bool get notesLater => workflowEnabled('notesLater');
+
+  Future<void> setNotesLater(bool enabled) =>
+      setWorkflowEnabled('notesLater', enabled);
+
   /// How much a local server can read at once, or 0 for "go by what it says".
   ///
   /// The number that decides how a long recording is written. Unknown means the pipeline

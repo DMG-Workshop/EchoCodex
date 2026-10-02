@@ -65,6 +65,18 @@ class RecordDone extends RecordState {
   final String? warning;
 }
 
+/// Recorded and saved, with the notes deliberately not written yet.
+///
+/// Carries the id so the screen can offer to write them now without going hunting, and
+/// the duration because "saved, 47 minutes" is the reassurance someone who just recorded
+/// something important is looking for.
+class RecordSaved extends RecordState {
+  const RecordSaved(this.recordingId, {required this.duration, this.warning});
+  final String recordingId;
+  final Duration duration;
+  final String? warning;
+}
+
 class RecordError extends RecordState {
   const RecordError(this.message, {this.remedy, this.recordingId});
   final String message;
@@ -86,6 +98,7 @@ class RecordingController extends StateNotifier<RecordState> {
     DeviceAudioCapture deviceCapture = const DeviceAudioCapture(),
     this.interruptions = const InterruptionPolicy(),
     DebugLog? debugLog,
+    this.onNotesReady,
   })  : _debugLog = debugLog ?? DebugLog(),
         _recorder = recorder,
         _deviceCapture = deviceCapture,
@@ -115,6 +128,14 @@ class RecordingController extends StateNotifier<RecordState> {
   final AudioImportService _importer;
   final DeviceAudioCapture _deviceCapture;
   final InterruptionPolicy interruptions;
+
+  /// Told when deferred notes are finished, so something outside can say so.
+  ///
+  /// A callback rather than the notification service itself, because the rule for when
+  /// to post one belongs here and the means of posting does not — and because a test
+  /// should be able to assert that the person was told without a notification plugin
+  /// anywhere near it.
+  final Future<void> Function(String recordingId, String title)? onNotesReady;
 
   /// When the current device-playback capture began, or null when none is running. The
   /// recorder's own clock does not apply — the microphone is not involved.
@@ -432,6 +453,23 @@ class RecordingController extends StateNotifier<RecordState> {
       );
     }
 
+    // Record now, notes later. The chunks are planned and written down so the recording
+    // is in the same state an interrupted one is in, and the work is finished by the same
+    // resume path that has always picked those up — nothing here needs to know how.
+    if (_settings.notesLater) {
+      await _pipelineFor(providers, captured.path).prepare(
+        recordingId: recordingId,
+        totalDurationMs: captured.duration.inMilliseconds,
+        silences: captured.silences,
+      );
+      state = RecordSaved(
+        recordingId,
+        duration: captured.duration,
+        warning: _storageWarning,
+      );
+      return;
+    }
+
     final templateInstructions = await _activeTemplateInstructions();
     await _consume(
       _pipelineFor(providers, captured.path).start(
@@ -591,6 +629,7 @@ class RecordingController extends StateNotifier<RecordState> {
         quizLimit: _quizLimit,
       ),
       recordingId,
+      announce: true,
     );
   }
 
@@ -655,8 +694,13 @@ class RecordingController extends StateNotifier<RecordState> {
           ? TranscriptCleaner.clean(transcript.plainText)
           : null;
 
-  Future<void> _consume(
-      Stream<PipelineEvent> events, String recordingId) async {
+  /// Drives the UI from the pipeline's events, and saves what comes out.
+  ///
+  /// [announce] is set on the deferred path only. Posting a notification while the
+  /// person is watching the progress bar that just finished is noise; posting one when
+  /// they put the phone away and went to lunch is the entire point of deferring.
+  Future<void> _consume(Stream<PipelineEvent> events, String recordingId,
+      {bool announce = false}) async {
     await for (final event in events) {
       switch (event) {
         case TranscribingChunk(:final completed, :final total):
@@ -685,6 +729,12 @@ class RecordingController extends StateNotifier<RecordState> {
             if (_storageWarning != null) _storageWarning!,
             if (structuringWarning != null) structuringWarning,
           ];
+          if (announce) {
+            await onNotesReady?.call(
+              recordingId,
+              outcome.document.meta.title,
+            );
+          }
           state = RecordDone(
             recordingId,
             warning: warning.isEmpty ? null : warning.join(' · '),
@@ -893,5 +943,8 @@ final recordingControllerProvider =
     database: ref.watch(databaseProvider),
     background: ref.watch(backgroundAudioProvider),
     debugLog: ref.watch(debugLogProvider),
+    onNotesReady: (recordingId, title) => ref
+        .read(reminderServiceProvider)
+        .notesReady(id: recordingId, title: title),
   ),
 );

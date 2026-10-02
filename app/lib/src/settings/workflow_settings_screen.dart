@@ -334,6 +334,15 @@ class _WorkflowSettingsScreenState
                   'Not calls: Android reserves call audio, so Zoom, Teams and Meet '
                   'come through silent.'),
           const _MeetingCaptureNote(),
+          _toggle(
+              store,
+              'notesLater',
+              'Record now, write the notes later',
+              'Stop recording and you are done — the recording is saved and the '
+                  'notes are written when you choose, or when the machine you '
+                  'point this at is reachable. You can close the app; a '
+                  'notification tells you when they are ready. Off, you wait at a '
+                  'progress bar while they are written.'),
           const _SectionHeader('History and feedback'),
           _toggle(
               store,
