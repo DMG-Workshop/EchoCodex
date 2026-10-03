@@ -14,6 +14,7 @@ import 'package:intl/intl.dart';
 
 import 'board_view.dart';
 import 'export_sheet.dart';
+import 'tag_sheet.dart';
 import 'calendar_view.dart';
 import 'gantt_entry_sheet.dart';
 import 'timeline_view.dart';
@@ -112,6 +113,13 @@ class _NoteView extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
+            // Available whether or not a note exists: a recording still waiting to be
+            // written is exactly the one worth filing before it gets lost in the list.
+            IconButton(
+              icon: const Icon(Icons.sell_outlined),
+              tooltip: 'Tags and folder',
+              onPressed: () => openTagSheet(context, ref, recording),
+            ),
             if (note != null)
               IconButton(
                 icon: const Icon(Icons.ios_share),

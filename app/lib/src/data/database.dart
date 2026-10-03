@@ -69,6 +69,16 @@ class Recordings extends Table {
   /// default language turned out wrong for this particular recording.
   TextColumn get language => text().nullable()();
 
+  /// Where the user filed this, as a path like `Work/Standups`, or null for unfiled.
+  ///
+  /// A path on the row rather than a folders table with parent ids. Folders here are
+  /// exactly one thing — a place a recording sits, one at a time — and a string gives
+  /// that plus nesting for nothing. The folder list is a `SELECT DISTINCT`, creating one
+  /// is typing a name, and renaming one is an update over a prefix. A table would add
+  /// three joins and an empty-folder lifecycle to maintain, for a feature whose whole job
+  /// is being simpler than tags.
+  TextColumn get folder => text().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }
@@ -295,6 +305,52 @@ enum ChunkState {
   failed,
 }
 
+/// A label the user put on recordings, by hand.
+///
+/// Many-to-many with recordings, which is the whole difference from [Recordings.folder]:
+/// a standup is both "work" and "weekly", and asking someone to pick one is how a
+/// filing system stops being used. This also covers what the request called categories —
+/// a category is a tag that happens to be the only one on the recording, and a second
+/// mechanism for it would be two ways to say one thing.
+@DataClassName('TagRow')
+class Tags extends Table {
+  TextColumn get id => text()();
+
+  /// As typed, and shown as typed.
+  TextColumn get name => text()();
+
+  /// Lower-cased, trimmed, whitespace collapsed. "Work", "work" and " Work " are one
+  /// tag: a filter that silently splits across three spellings of the same word is worse
+  /// than no filter, because the missing recordings look deleted.
+  TextColumn get normalized => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+
+  @override
+  List<Set<Column<Object>>> get uniqueKeys => [
+        {normalized},
+      ];
+}
+
+/// Which recordings carry which tags.
+///
+/// Both sides cascade: a deleted recording must not leave rows pointing at it, and a
+/// deleted tag must come off every recording rather than leaving a filter that matches
+/// something with no name.
+@DataClassName('RecordingTagRow')
+class RecordingTags extends Table {
+  TextColumn get recordingId =>
+      text().references(Recordings, #id, onDelete: KeyAction.cascade)();
+  TextColumn get tagId =>
+      text().references(Tags, #id, onDelete: KeyAction.cascade)();
+
+  @override
+  Set<Column<Object>> get primaryKey => {recordingId, tagId};
+}
+
 @DriftDatabase(
   tables: [
     Recordings,
@@ -305,6 +361,8 @@ enum ChunkState {
     CodexNotes,
     GanttEntries,
     RecallChunks,
+    Tags,
+    RecordingTags,
   ],
 )
 class TranscriptDatabase extends _$TranscriptDatabase {
@@ -313,7 +371,7 @@ class TranscriptDatabase extends _$TranscriptDatabase {
   TranscriptDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -352,6 +410,11 @@ class TranscriptDatabase extends _$TranscriptDatabase {
           }
           if (from < 10) {
             await m.createTable(recallChunks);
+          }
+          if (from < 11) {
+            await m.createTable(tags);
+            await m.createTable(recordingTags);
+            await m.addColumn(recordings, recordings.folder);
           }
         },
         beforeOpen: (details) async {

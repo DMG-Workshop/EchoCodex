@@ -357,6 +357,215 @@ class RecordingRepository {
         ..orderBy([(r) => OrderingTerm.desc(r.startedAt)]))
       .watch();
 
+  // --- Tags and folders ---------------------------------------------------------
+  //
+  // Two mechanisms because they answer two different questions. A folder is where a
+  // recording sits, one at a time, for people who think in filing. Tags are what it is
+  // about, any number at once, for people who think in filters. Offering only one of
+  // them means half the library stays unsorted.
+
+  /// Lower-cased, trimmed, whitespace collapsed.
+  ///
+  /// The only definition of "the same tag". Exposed so the UI can tell, before saving,
+  /// that what someone typed is a tag they already have.
+  static String normalizeTag(String name) => name
+      .toLowerCase()
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+
+  /// Every tag, alphabetical, with how many recordings carry each.
+  ///
+  /// The count is what makes the list usable: a filter row of forty tags is unreadable,
+  /// and the ones worth showing first are the ones actually used.
+  Stream<List<TagWithCount>> watchTags() {
+    final uses = _db.recordingTags.tagId.count();
+    final query = _db.select(_db.tags).join([
+      leftOuterJoin(
+        _db.recordingTags,
+        _db.recordingTags.tagId.equalsExp(_db.tags.id),
+      ),
+    ])
+      ..addColumns([uses])
+      ..groupBy([_db.tags.id])
+      ..orderBy([OrderingTerm.asc(_db.tags.normalized)]);
+
+    return query.watch().map((rows) => [
+          for (final row in rows)
+            TagWithCount(row.readTable(_db.tags), row.read(uses) ?? 0),
+        ]);
+  }
+
+  /// The tags on one recording, alphabetical.
+  Stream<List<TagRow>> watchTagsFor(String recordingId) {
+    final query = _db.select(_db.recordingTags).join([
+      innerJoin(_db.tags, _db.tags.id.equalsExp(_db.recordingTags.tagId)),
+    ])
+      ..where(_db.recordingTags.recordingId.equals(recordingId))
+      ..orderBy([OrderingTerm.asc(_db.tags.normalized)]);
+
+    return query
+        .watch()
+        .map((rows) => [for (final row in rows) row.readTable(_db.tags)]);
+  }
+
+  /// The tag called [name], creating it only if no existing tag normalizes to the same
+  /// thing.
+  ///
+  /// Returns the existing row in that case rather than failing on the unique index, so
+  /// typing "Work" when "work" exists tags the recording instead of showing an error
+  /// about a tag the user cannot see.
+  Future<TagRow> ensureTag(String name) async {
+    final normalized = normalizeTag(name);
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'a tag needs a name');
+    }
+    final existing = await (_db.select(_db.tags)
+          ..where((t) => t.normalized.equals(normalized)))
+        .getSingleOrNull();
+    if (existing != null) return existing;
+
+    final row = TagRow(
+      id: 'tag_${DateTime.now().microsecondsSinceEpoch}',
+      name: name.trim(),
+      normalized: normalized,
+      createdAt: DateTime.now(),
+    );
+    await _db.into(_db.tags).insert(row);
+    return row;
+  }
+
+  /// Puts [name] on a recording, creating the tag if it is new.
+  Future<TagRow> tagRecording(String recordingId, String name) async {
+    final tag = await ensureTag(name);
+    await _db.into(_db.recordingTags).insertOnConflictUpdate(
+          RecordingTagRow(recordingId: recordingId, tagId: tag.id),
+        );
+    return tag;
+  }
+
+  /// Takes one tag off one recording. The tag itself survives, because it is probably
+  /// on other recordings and because deleting it here would be a surprise.
+  Future<void> untagRecording(String recordingId, String tagId) =>
+      (_db.delete(_db.recordingTags)
+            ..where((rt) =>
+                rt.recordingId.equals(recordingId) & rt.tagId.equals(tagId)))
+          .go();
+
+  /// Renames a tag, keeping it on everything it was on.
+  ///
+  /// Merges into an existing tag when the new name normalizes to one: renaming "wrk" to
+  /// "work" when "work" exists has to mean one tag afterwards, not a unique-index
+  /// failure the user cannot act on.
+  Future<TagRow> renameTag(String tagId, String name) async {
+    final normalized = normalizeTag(name);
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'a tag needs a name');
+    }
+    final clash = await (_db.select(_db.tags)
+          ..where((t) => t.normalized.equals(normalized) & t.id.equals(tagId).not()))
+        .getSingleOrNull();
+
+    if (clash != null) {
+      await _mergeTags(from: tagId, into: clash.id);
+      return clash;
+    }
+
+    await (_db.update(_db.tags)..where((t) => t.id.equals(tagId))).write(
+      TagsCompanion(name: Value(name.trim()), normalized: Value(normalized)),
+    );
+    return (await (_db.select(_db.tags)..where((t) => t.id.equals(tagId)))
+        .getSingle());
+  }
+
+  /// Moves every recording from one tag to another, then removes the empty one.
+  Future<void> _mergeTags({required String from, required String into}) async {
+    final moving = await (_db.select(_db.recordingTags)
+          ..where((rt) => rt.tagId.equals(from)))
+        .get();
+    await _db.batch((batch) {
+      for (final row in moving) {
+        // insertOnConflictUpdate, not insert: a recording already carrying both tags
+        // would otherwise fail the primary key on the way through the merge.
+        batch.insert(
+          _db.recordingTags,
+          RecordingTagRow(recordingId: row.recordingId, tagId: into),
+          mode: InsertMode.insertOrReplace,
+        );
+      }
+    });
+    await (_db.delete(_db.tags)..where((t) => t.id.equals(from))).go();
+  }
+
+  /// Removes a tag everywhere. The cascade takes it off every recording.
+  Future<void> deleteTag(String tagId) =>
+      (_db.delete(_db.tags)..where((t) => t.id.equals(tagId))).go();
+
+  /// Which tags are on which recordings.
+  ///
+  /// One query feeding both the filter and the chips on each tile. The library already
+  /// holds every recording in memory to search their text, so filtering it by tag
+  /// belongs in the same pass — a separate SQL query per selected tag would be a second
+  /// source of "which recordings are showing" that search would then have to agree with.
+  Stream<Map<String, Set<String>>> watchTagIndex() =>
+      _db.select(_db.recordingTags).watch().map((rows) {
+        final index = <String, Set<String>>{};
+        for (final row in rows) {
+          (index[row.recordingId] ??= <String>{}).add(row.tagId);
+        }
+        return index;
+      });
+
+  /// Every folder a recording has been filed in, alphabetical.
+  ///
+  /// Derived rather than stored, so there is no such thing as an empty folder to clean
+  /// up and no second place for the truth to live.
+  Stream<List<String>> watchFolders() => (_db.selectOnly(_db.recordings)
+        ..addColumns([_db.recordings.folder])
+        ..where(_db.recordings.folder.isNotNull())
+        ..groupBy([_db.recordings.folder])
+        ..orderBy([OrderingTerm.asc(_db.recordings.folder)]))
+      .watch()
+      .map((rows) => [
+            for (final row in rows)
+              if (row.read(_db.recordings.folder) case final String folder)
+                folder,
+          ]);
+
+  /// Files a recording, or unfiles it with null.
+  Future<void> setFolder(String recordingId, String? folder) {
+    final cleaned = folder?.trim();
+    return (_db.update(_db.recordings)..where((r) => r.id.equals(recordingId)))
+        .write(RecordingsCompanion(
+      folder: Value(cleaned == null || cleaned.isEmpty ? null : cleaned),
+    ));
+  }
+
+  /// Renames a folder and everything nested under it.
+  ///
+  /// A path rename, so "Work" becoming "Clients" takes "Work/Acme" with it. Without the
+  /// separator check, renaming "Work" would also catch "Workshop".
+  Future<int> renameFolder(String from, String to) async {
+    final target = to.trim();
+    if (target.isEmpty) {
+      throw ArgumentError.value(to, 'to', 'a folder needs a name');
+    }
+    final affected = await (_db.select(_db.recordings)
+          ..where((r) => r.folder.equals(from) | r.folder.like('$from/%')))
+        .get();
+    await _db.batch((batch) {
+      for (final recording in affected) {
+        batch.update(
+          _db.recordings,
+          RecordingsCompanion(
+            folder: Value(target + recording.folder!.substring(from.length)),
+          ),
+          where: (r) => r.id.equals(recording.id),
+        );
+      }
+    });
+    return affected.length;
+  }
+
   Future<Recording?> byId(String id) =>
       (_db.select(_db.recordings)..where((r) => r.id.equals(id)))
           .getSingleOrNull();
@@ -695,4 +904,12 @@ List<double> unpackVector(Uint8List bytes) {
     aligned.offsetInBytes,
     aligned.lengthInBytes ~/ 4,
   ).toList();
+}
+
+/// A tag and how many recordings carry it.
+class TagWithCount {
+  const TagWithCount(this.tag, this.count);
+
+  final TagRow tag;
+  final int count;
 }

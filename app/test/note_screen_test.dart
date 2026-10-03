@@ -161,6 +161,82 @@ void main() {
     expect(find.textContaining('Alice: Hello there'), findsOneWidget);
   });
 
+  group('tags and folders', () {
+    testWidgets('tags and a folder are set in one sheet', (tester) async {
+      await pumpNote(tester, recordingRow());
+
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tags'), findsOneWidget);
+      expect(find.text('Folder'), findsOneWidget,
+          reason: 'one decision — where it goes and what it is about — made '
+              'once, usually right after reading the notes');
+    });
+
+    testWidgets('typing a tag puts it on the recording', (tester) async {
+      await pumpNote(tester, recordingRow());
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Add a tag'), 'work');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(await noteRepo.watchTagsFor('r_1').first, hasLength(1));
+      expect(find.widgetWithText(InputChip, 'work'), findsOneWidget,
+          reason: 'it appears as a removable chip, not just in the database');
+    });
+
+    testWidgets('a tag already in use is offered rather than retyped',
+        (tester) async {
+      await pumpNote(tester, recordingRow());
+      noteRepo.seedTag('hiring');
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Already in use'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ActionChip, 'hiring'));
+      await tester.pumpAndSettle();
+
+      expect(await noteRepo.watchTagsFor('r_1').first, hasLength(1));
+    });
+
+    testWidgets('a tag can be taken off again', (tester) async {
+      await pumpNote(tester, recordingRow());
+      noteRepo.seedTag('work', on: ['r_1']);
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Remove work'));
+      await tester.pumpAndSettle();
+
+      expect(await noteRepo.watchTagsFor('r_1').first, isEmpty);
+    });
+
+    testWidgets('typing a folder files the recording', (tester) async {
+      await pumpNote(tester, recordingRow());
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Unfiled'), 'Work/Standups');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect((await noteRepo.byId('r_1'))!.folder, 'Work/Standups');
+    });
+
+    testWidgets('an unstructured recording can still be filed', (tester) async {
+      await pumpNote(tester, recordingRow(structured: false));
+
+      expect(find.byTooltip('Tags and folder'), findsOneWidget,
+          reason: 'a recording still waiting to be written is exactly the one '
+              'worth filing before it gets lost in the list');
+    });
+  });
+
   group('playback where it cannot work', () {
     final original = audioPlaybackUnavailable;
     tearDown(() => audioPlaybackUnavailable = original);

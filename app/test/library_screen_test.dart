@@ -236,4 +236,114 @@ void main() {
     expect(find.text('Recording deleted'), findsOneWidget);
     expect(repo.deletedIds, ['r_1']);
   });
+
+  group('narrowing the library by tag and folder', () {
+    testWidgets('the filter row is absent until there is something in it',
+        (tester) async {
+      await pumpLibrary(tester);
+
+      expect(find.text('Every folder'), findsNothing,
+          reason: 'a permanently empty control row is the kind of thing people '
+              'learn to ignore before it ever fills up');
+      expect(find.byType(FilterChip), findsNothing);
+    });
+
+    testWidgets('a tag appears as a chip with its count', (tester) async {
+      await pumpLibrary(tester, rows: [
+        recordingRow(),
+        recordingRow().copyWith(id: 'r_2', title: 'Standup notes'),
+      ]);
+      repo.seedTag('work', on: ['r_1', 'r_2']);
+      await tester.pumpAndSettle();
+
+      expect(find.text('work · 2'), findsOneWidget);
+    });
+
+    testWidgets('selecting a tag hides the recordings without it',
+        (tester) async {
+      await pumpLibrary(tester, rows: [
+        recordingRow(),
+        recordingRow().copyWith(id: 'r_2', title: 'Standup notes'),
+      ]);
+      repo.seedTag('work', on: ['r_1']);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FilterChip));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Auth migration kickoff'), findsOneWidget);
+      expect(find.text('Standup notes'), findsNothing);
+    });
+
+    testWidgets('two tags selected means both, not either', (tester) async {
+      await pumpLibrary(tester, rows: [
+        recordingRow(),
+        recordingRow().copyWith(id: 'r_2', title: 'Standup notes'),
+      ]);
+      repo.seedTag('work', on: ['r_1', 'r_2']);
+      repo.seedTag('hiring', on: ['r_1']);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('hiring · 1'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('work · 2'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Auth migration kickoff'), findsOneWidget);
+      expect(find.text('Standup notes'), findsNothing,
+          reason: '"the standups that are also about hiring" is the question '
+              'worth asking; "either" is just a longer list');
+    });
+
+    testWidgets('Clear puts everything back', (tester) async {
+      await pumpLibrary(tester, rows: [
+        recordingRow(),
+        recordingRow().copyWith(id: 'r_2', title: 'Standup notes'),
+      ]);
+      repo.seedTag('work', on: ['r_1']);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FilterChip));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Clear'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Standup notes'), findsOneWidget);
+    });
+
+    testWidgets('a folder and its tags show on the tile', (tester) async {
+      await pumpLibrary(tester, rows: [
+        recordingRow(folder: 'Work/Standups'),
+      ]);
+      repo.seedTag('weekly', on: ['r_1']);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Work/Standups'), findsWidgets);
+      expect(find.text('weekly'), findsWidgets,
+          reason: 'a label set in a sheet and never shown again is a filing '
+              'system nobody trusts');
+    });
+
+    testWidgets('narrowing by tag still composes with the search box',
+        (tester) async {
+      // structured: false so the rows carry no note text — the shared note fixture
+      // mentions auth, which would make every row match the search.
+      await pumpLibrary(tester, rows: [
+        recordingRow(structured: false).copyWith(id: 'r_1', title: 'Auth kickoff'),
+        recordingRow(structured: false).copyWith(id: 'r_2', title: 'Auth retro'),
+        recordingRow(structured: false).copyWith(id: 'r_3', title: 'Hiring sync'),
+      ]);
+      repo.seedTag('work', on: ['r_1', 'r_3']);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FilterChip));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Auth');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Auth kickoff'), findsOneWidget);
+      expect(find.text('Hiring sync'), findsNothing, reason: 'tagged, wrong word');
+      expect(find.text('Auth retro'), findsNothing, reason: 'right word, untagged');
+    });
+  });
 }
