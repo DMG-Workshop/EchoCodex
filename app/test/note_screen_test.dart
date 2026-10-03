@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:flutter/material.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:echo_codex_app/src/data/database.dart' as db;
 import 'package:echo_codex_app/src/recording/recording_controller.dart';
+import 'package:echo_codex_app/src/recording/desktop_playback.dart';
 import 'package:echo_codex_app/src/screens/note_screen.dart';
 import 'package:echo_codex_app/src/settings/provider_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -161,27 +161,103 @@ void main() {
     expect(find.textContaining('Alice: Hello there'), findsOneWidget);
   });
 
-  group('playback where just_audio has no implementation', () {
-    tearDown(() {
-      audioPlaybackSupported = () => !Platform.isLinux && !Platform.isWindows;
+  group('tags and folders', () {
+    testWidgets('tags and a folder are set in one sheet', (tester) async {
+      await pumpNote(tester, recordingRow());
+
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Tags'), findsOneWidget);
+      expect(find.text('Folder'), findsOneWidget,
+          reason: 'one decision — where it goes and what it is about — made '
+              'once, usually right after reading the notes');
     });
+
+    testWidgets('typing a tag puts it on the recording', (tester) async {
+      await pumpNote(tester, recordingRow());
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Add a tag'), 'work');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(await noteRepo.watchTagsFor('r_1').first, hasLength(1));
+      expect(find.widgetWithText(InputChip, 'work'), findsOneWidget,
+          reason: 'it appears as a removable chip, not just in the database');
+    });
+
+    testWidgets('a tag already in use is offered rather than retyped',
+        (tester) async {
+      await pumpNote(tester, recordingRow());
+      noteRepo.seedTag('hiring');
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Already in use'), findsOneWidget);
+      await tester.tap(find.widgetWithText(ActionChip, 'hiring'));
+      await tester.pumpAndSettle();
+
+      expect(await noteRepo.watchTagsFor('r_1').first, hasLength(1));
+    });
+
+    testWidgets('a tag can be taken off again', (tester) async {
+      await pumpNote(tester, recordingRow());
+      noteRepo.seedTag('work', on: ['r_1']);
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Remove work'));
+      await tester.pumpAndSettle();
+
+      expect(await noteRepo.watchTagsFor('r_1').first, isEmpty);
+    });
+
+    testWidgets('typing a folder files the recording', (tester) async {
+      await pumpNote(tester, recordingRow());
+      await tester.tap(find.byTooltip('Tags and folder'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+          find.widgetWithText(TextField, 'Unfiled'), 'Work/Standups');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect((await noteRepo.byId('r_1'))!.folder, 'Work/Standups');
+    });
+
+    testWidgets('an unstructured recording can still be filed', (tester) async {
+      await pumpNote(tester, recordingRow(structured: false));
+
+      expect(find.byTooltip('Tags and folder'), findsOneWidget,
+          reason: 'a recording still waiting to be written is exactly the one '
+              'worth filing before it gets lost in the list');
+    });
+  });
+
+  group('playback where it cannot work', () {
+    final original = audioPlaybackUnavailable;
+    tearDown(() => audioPlaybackUnavailable = original);
 
     testWidgets('says why there is no play button instead of leaving a gap',
         (tester) async {
-      audioPlaybackSupported = () => false;
+      audioPlaybackUnavailable =
+          () => 'needs libmpv, which is not installed. The recording is still '
+              'saved, and still exports.';
       await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
       await tester.tap(find.text('Transcript'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('not available on this platform'),
-          findsOneWidget);
+      expect(find.textContaining('needs libmpv'), findsOneWidget);
       expect(find.textContaining('still saved'), findsOneWidget,
           reason: 'the audio is on disk and still exports — a user who cannot '
               'find the play control is owed that distinction');
     });
 
     testWidgets('the transcript itself still opens and reads', (tester) async {
-      audioPlaybackSupported = () => false;
+      audioPlaybackUnavailable = () => 'no player here';
       await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
       await tester.tap(find.text('Transcript'));
       await tester.pumpAndSettle();
@@ -194,12 +270,26 @@ void main() {
 
     testWidgets('where playback works, nothing apologises for it',
         (tester) async {
-      audioPlaybackSupported = () => true;
+      audioPlaybackUnavailable = () => null;
       await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
       await tester.tap(find.text('Transcript'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('not available on this platform'), findsNothing);
+      expect(find.byType(Icon).evaluate().map((e) => (e.widget as Icon).icon),
+          isNot(contains(Icons.volume_off_outlined)),
+          reason: 'the apology is keyed off the seam, not off the platform');
+    });
+
+    testWidgets('the reason the seam gives is the reason shown, verbatim',
+        (tester) async {
+      audioPlaybackUnavailable = () => 'a very specific explanation';
+      await pumpNote(tester, recordingRow(transcriptText: 'said out loud'));
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('a very specific explanation'), findsOneWidget,
+          reason: 'the widget must not second-guess or reword the diagnosis — '
+              'it has no platform knowledge to do it with');
     });
   });
 

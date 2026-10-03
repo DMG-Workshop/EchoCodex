@@ -28,6 +28,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   final _searchController = TextEditingController();
   String _query = '';
 
+  /// Tags to narrow by. Every one selected must be present, not any — "the standups
+  /// that are also about hiring" is the question worth asking.
+  final Set<String> _tagFilter = {};
+
+  /// Folder to narrow by, including anything nested under it. Null is everywhere.
+  String? _folderFilter;
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -131,6 +138,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   ),
                 ),
               ),
+              _FilterRow(
+                selectedTags: _tagFilter,
+                folder: _folderFilter,
+                onToggleTag: (id) => setState(() =>
+                    _tagFilter.contains(id)
+                        ? _tagFilter.remove(id)
+                        : _tagFilter.add(id)),
+                onFolder: (folder) => setState(() => _folderFilter = folder),
+                onClear: () => setState(() {
+                  _tagFilter.clear();
+                  _folderFilter = null;
+                }),
+              ),
               Expanded(
                 child: !hasResults
                     ? !hasQuery
@@ -172,8 +192,26 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   List<db.Recording> _filteredRecordings(List<db.Recording> items) {
+    var narrowed = items;
+
+    // Tag and folder narrow the list before the text search runs over it, so the three
+    // compose: a word, inside a folder, among recordings carrying two tags.
+    if (_folderFilter case final String folder) {
+      narrowed = narrowed
+          .where((r) =>
+              r.folder == folder || (r.folder?.startsWith('\$folder/') ?? false))
+          .toList();
+    }
+    if (_tagFilter.isNotEmpty) {
+      final index = ref.watch(tagIndexProvider).valueOrNull ?? const {};
+      narrowed = narrowed
+          .where((r) =>
+              _tagFilter.every((id) => index[r.id]?.contains(id) ?? false))
+          .toList();
+    }
+
     final needle = _query.trim().toLowerCase();
-    if (needle.isEmpty) return items;
+    if (needle.isEmpty) return narrowed;
     // "Searchable history" used to gate nothing: the switch could be turned off and
     // every word anyone had said stayed searchable anyway. Off, search now reaches
     // titles and the notes the user kept, and stops short of the transcripts — which
@@ -181,7 +219,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final transcripts = ref
         .read(settingsStoreProvider)
         .workflowEnabled('searchableHistory');
-    return items.where((r) {
+    return narrowed.where((r) {
       final noteText = _searchableNoteText(r.noteJson);
       return _contains(r.title, needle) ||
           _contains(noteText, needle) ||
@@ -431,6 +469,77 @@ class _ProcessingQueuePanelState extends ConsumerState<_ProcessingQueuePanel> {
 
 /// A small section label between the Codex and recordings halves of a search result
 /// list — only shown once there is a query splitting the two apart.
+/// Narrowing by folder and by tag, above the list.
+///
+/// Absent entirely until there is something to narrow by: a library with no tags and no
+/// folders has nothing to offer here, and a permanently empty control row is the kind of
+/// thing people learn to ignore before it ever fills up.
+class _FilterRow extends ConsumerWidget {
+  const _FilterRow({
+    required this.selectedTags,
+    required this.folder,
+    required this.onToggleTag,
+    required this.onFolder,
+    required this.onClear,
+  });
+
+  final Set<String> selectedTags;
+  final String? folder;
+  final void Function(String tagId) onToggleTag;
+  final void Function(String? folder) onFolder;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tags = ref.watch(tagsProvider).valueOrNull ?? const <TagWithCount>[];
+    final folders = ref.watch(foldersProvider).valueOrNull ?? const <String>[];
+    if (tags.isEmpty && folders.isEmpty) return const SizedBox.shrink();
+
+    final anything = selectedTags.isNotEmpty || folder != null;
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        children: [
+          if (folders.isNotEmpty) ...[
+            PopupMenuButton<String?>(
+              tooltip: 'Filter by folder',
+              onSelected: onFolder,
+              itemBuilder: (context) => [
+                const PopupMenuItem<String?>(
+                  child: Text('Every folder'),
+                ),
+                for (final name in folders)
+                  PopupMenuItem<String?>(value: name, child: Text(name)),
+              ],
+              child: Chip(
+                avatar: const Icon(Icons.folder_outlined, size: 18),
+                label: Text(folder ?? 'Every folder'),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          for (final entry in tags) ...[
+            FilterChip(
+              label: Text('${entry.tag.name} · ${entry.count}'),
+              selected: selectedTags.contains(entry.tag.id),
+              onSelected: (_) => onToggleTag(entry.tag.id),
+            ),
+            const SizedBox(width: 8),
+          ],
+          if (anything)
+            ActionChip(
+              avatar: const Icon(Icons.clear, size: 18),
+              label: const Text('Clear'),
+              onPressed: onClear,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ResultsHeader extends StatelessWidget {
   const _ResultsHeader({required this.label, required this.count});
 
@@ -481,6 +590,40 @@ class _CodexResultTile extends ConsumerWidget {
       );
 }
 
+/// A folder or tag on a library tile. Small and quiet: it is a label, not a control.
+class _TileChip extends StatelessWidget {
+  const _TileChip({required this.label, this.icon});
+
+  final String label;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EmptyLibrary extends StatelessWidget {
   const _EmptyLibrary();
 
@@ -522,6 +665,9 @@ class _RecordingTile extends ConsumerWidget {
     final theme = Theme.of(context);
     final structured = recording.noteJson != null;
     final duration = Duration(milliseconds: recording.durationMs);
+    final tags =
+        ref.watch(recordingTagsProvider(recording.id)).valueOrNull ??
+            const <db.TagRow>[];
     return Dismissible(
       key: ValueKey(recording.id),
       direction: DismissDirection.endToStart,
@@ -572,10 +718,36 @@ class _RecordingTile extends ConsumerWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Text(
-          '${DateFormat.yMMMd().add_jm().format(recording.startedAt)} · '
-          '${formatDuration(duration)}',
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${DateFormat.yMMMd().add_jm().format(recording.startedAt)} · '
+              '${formatDuration(duration)}',
+            ),
+            // Where it is filed and what it is about, on the tile. Tags set in a sheet
+            // and then never shown again would be a filing system nobody trusts: the
+            // point of putting a label on something is seeing it later.
+            if (recording.folder != null || tags.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    if (recording.folder case final String folder)
+                      _TileChip(
+                        icon: Icons.folder_outlined,
+                        label: folder,
+                      ),
+                    for (final tag in tags) _TileChip(label: tag.name),
+                  ],
+                ),
+              ),
+          ],
         ),
+        isThreeLine: recording.folder != null || tags.isNotEmpty,
         leading: Icon(
           structured ? Icons.notes : Icons.hourglass_empty,
           color: structured

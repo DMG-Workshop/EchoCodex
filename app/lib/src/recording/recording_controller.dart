@@ -904,6 +904,26 @@ final recordingsProvider = StreamProvider<List<Recording>>(
   (ref) => ref.watch(repositoryProvider).watchAll(),
 );
 
+/// Every tag, with how many recordings carry each.
+final tagsProvider = StreamProvider<List<TagWithCount>>(
+  (ref) => ref.watch(repositoryProvider).watchTags(),
+);
+
+/// Which tags are on which recordings, for filtering a list already on screen.
+final tagIndexProvider = StreamProvider<Map<String, Set<String>>>(
+  (ref) => ref.watch(repositoryProvider).watchTagIndex(),
+);
+
+/// The tags on one recording.
+final recordingTagsProvider =
+    StreamProvider.family<List<TagRow>, String>((ref, recordingId) =>
+        ref.watch(repositoryProvider).watchTagsFor(recordingId));
+
+/// Every folder a recording has been filed in.
+final foldersProvider = StreamProvider<List<String>>(
+  (ref) => ref.watch(repositoryProvider).watchFolders(),
+);
+
 /// The Codex: notes the user has kept on purpose, independent of any recording.
 final codexNotesProvider = StreamProvider<List<CodexNote>>(
   (ref) => ref.watch(repositoryProvider).watchCodexNotes(),

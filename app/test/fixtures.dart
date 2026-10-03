@@ -107,6 +107,7 @@ db.Recording recordingRow({
   String? speakerNamesJson,
   String? cleanedTranscriptText,
   bool priority = false,
+  String? folder,
 }) =>
     db.Recording(
       id: 'r_1',
@@ -126,6 +127,7 @@ db.Recording recordingRow({
       transcriptSegmentsJson: transcriptSegmentsJson,
       speakerNamesJson: speakerNamesJson,
       cleanedTranscriptText: cleanedTranscriptText,
+      folder: folder,
       priority: priority,
       localOnly: false,
       templateId: null,
@@ -537,4 +539,162 @@ class FakeRecordingRepository implements RecordingRepository {
   @override
   Future<void> updateNote(String recordingId, NoteDocument document) =>
       throw UnimplementedError();
+
+  // --- Tags and folders ---------------------------------------------------------
+  //
+  // In-memory, and deliberately simple. The behaviour that matters — the unique index,
+  // the cascades, "every tag" rather than "any", the prefix rename — is SQL, and is
+  // tested against a real database in tags_folders_test.dart. What these need to be is
+  // plausible enough for a widget to render and be tapped.
+
+  final Map<String, db.TagRow> _tags = {};
+  final Set<(String, String)> _tagged = {};
+  final StreamController<void> _tagChanges =
+      StreamController<void>.broadcast();
+
+  /// Tags the fake starts with, so a test can show chips without creating them.
+  void seedTag(String name, {List<String> on = const []}) {
+    final tag = _tagFor(name);
+    for (final recordingId in on) {
+      _tagged.add((recordingId, tag.id));
+    }
+    _tagChanges.add(null);
+  }
+
+  db.TagRow _tagFor(String name) {
+    final normalized = RecordingRepository.normalizeTag(name);
+    final existing =
+        _tags.values.where((t) => t.normalized == normalized).firstOrNull;
+    if (existing != null) return existing;
+    final tag = db.TagRow(
+      id: 'tag_$normalized',
+      name: name.trim(),
+      normalized: normalized,
+      createdAt: DateTime(2026),
+    );
+    _tags[tag.id] = tag;
+    return tag;
+  }
+
+  Stream<T> _onTagChange<T>(T Function() read) async* {
+    yield read();
+    yield* _tagChanges.stream.map((_) => read());
+  }
+
+  @override
+  Future<db.TagRow> ensureTag(String name) async {
+    if (RecordingRepository.normalizeTag(name).isEmpty) {
+      throw ArgumentError.value(name, 'name', 'a tag needs a name');
+    }
+    final tag = _tagFor(name);
+    _tagChanges.add(null);
+    return tag;
+  }
+
+  @override
+  Future<db.TagRow> tagRecording(String recordingId, String name) async {
+    final tag = await ensureTag(name);
+    _tagged.add((recordingId, tag.id));
+    _tagChanges.add(null);
+    return tag;
+  }
+
+  @override
+  Future<void> untagRecording(String recordingId, String tagId) async {
+    _tagged.remove((recordingId, tagId));
+    _tagChanges.add(null);
+  }
+
+  @override
+  Future<void> deleteTag(String tagId) async {
+    _tags.remove(tagId);
+    _tagged.removeWhere((pair) => pair.$2 == tagId);
+    _tagChanges.add(null);
+  }
+
+  @override
+  Future<db.TagRow> renameTag(String tagId, String name) async {
+    final normalized = RecordingRepository.normalizeTag(name);
+    if (normalized.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'a tag needs a name');
+    }
+    final renamed = _tags[tagId]!
+        .copyWith(name: name.trim(), normalized: normalized);
+    _tags[tagId] = renamed;
+    _tagChanges.add(null);
+    return renamed;
+  }
+
+  List<db.TagRow> _tagsOf(String recordingId) => (_tagged
+          .where((pair) => pair.$1 == recordingId)
+          .map((pair) => _tags[pair.$2])
+          .whereType<db.TagRow>()
+          .toList()
+        ..sort((a, b) => a.normalized.compareTo(b.normalized)));
+
+  @override
+  Stream<List<db.TagRow>> watchTagsFor(String recordingId) =>
+      _onTagChange(() => _tagsOf(recordingId));
+
+  @override
+  Stream<List<TagWithCount>> watchTags() => _onTagChange(() {
+        final sorted = _tags.values.toList()
+          ..sort((a, b) => a.normalized.compareTo(b.normalized));
+        return [
+          for (final tag in sorted)
+            TagWithCount(
+              tag,
+              _tagged.where((pair) => pair.$2 == tag.id).length,
+            ),
+        ];
+      });
+
+  @override
+  Stream<Map<String, Set<String>>> watchTagIndex() => _onTagChange(() {
+        final index = <String, Set<String>>{};
+        for (final (recordingId, tagId) in _tagged) {
+          (index[recordingId] ??= <String>{}).add(tagId);
+        }
+        return index;
+      });
+
+  @override
+  Stream<List<String>> watchFolders() => _controller.stream.map((rows) =>
+      (rows.map((r) => r.folder).whereType<String>().toSet().toList()..sort()));
+
+  @override
+  Future<void> setFolder(String recordingId, String? folder) async {
+    final cleaned = folder?.trim();
+    _rows = [
+      for (final r in _rows)
+        if (r.id == recordingId)
+          r.copyWith(
+              folder: Value(
+                  cleaned == null || cleaned.isEmpty ? null : cleaned))
+        else
+          r,
+    ];
+    _controller.add(List.unmodifiable(_rows));
+  }
+
+  @override
+  Future<int> renameFolder(String from, String to) async {
+    if (to.trim().isEmpty) {
+      throw ArgumentError.value(to, 'to', 'a folder needs a name');
+    }
+    var moved = 0;
+    _rows = [
+      for (final r in _rows)
+        if (r.folder == from || (r.folder?.startsWith('$from/') ?? false))
+          (() {
+            moved++;
+            return r.copyWith(
+                folder: Value(to.trim() + r.folder!.substring(from.length)));
+          })()
+        else
+          r,
+    ];
+    _controller.add(List.unmodifiable(_rows));
+    return moved;
+  }
 }

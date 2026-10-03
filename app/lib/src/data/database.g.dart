@@ -145,6 +145,11 @@ class $RecordingsTable extends Recordings
   late final GeneratedColumn<String> language = GeneratedColumn<String>(
       'language', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _folderMeta = const VerificationMeta('folder');
+  @override
+  late final GeneratedColumn<String> folder = GeneratedColumn<String>(
+      'folder', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -167,7 +172,8 @@ class $RecordingsTable extends Recordings
         priority,
         localOnly,
         templateId,
-        language
+        language,
+        folder
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -293,6 +299,10 @@ class $RecordingsTable extends Recordings
       context.handle(_languageMeta,
           language.isAcceptableOrUnknown(data['language']!, _languageMeta));
     }
+    if (data.containsKey('folder')) {
+      context.handle(_folderMeta,
+          folder.isAcceptableOrUnknown(data['folder']!, _folderMeta));
+    }
     return context;
   }
 
@@ -348,6 +358,8 @@ class $RecordingsTable extends Recordings
           .read(DriftSqlType.string, data['${effectivePrefix}template_id']),
       language: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}language']),
+      folder: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}folder']),
     );
   }
 
@@ -410,6 +422,16 @@ class Recording extends DataClass implements Insertable<Recording> {
   /// global transcription language setting — set here when the auto-detected or
   /// default language turned out wrong for this particular recording.
   final String? language;
+
+  /// Where the user filed this, as a path like `Work/Standups`, or null for unfiled.
+  ///
+  /// A path on the row rather than a folders table with parent ids. Folders here are
+  /// exactly one thing — a place a recording sits, one at a time — and a string gives
+  /// that plus nesting for nothing. The folder list is a `SELECT DISTINCT`, creating one
+  /// is typing a name, and renaming one is an update over a prefix. A table would add
+  /// three joins and an empty-folder lifecycle to maintain, for a feature whose whole job
+  /// is being simpler than tags.
+  final String? folder;
   const Recording(
       {required this.id,
       required this.title,
@@ -431,7 +453,8 @@ class Recording extends DataClass implements Insertable<Recording> {
       required this.priority,
       required this.localOnly,
       this.templateId,
-      this.language});
+      this.language,
+      this.folder});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -487,6 +510,9 @@ class Recording extends DataClass implements Insertable<Recording> {
     }
     if (!nullToAbsent || language != null) {
       map['language'] = Variable<String>(language);
+    }
+    if (!nullToAbsent || folder != null) {
+      map['folder'] = Variable<String>(folder);
     }
     return map;
   }
@@ -544,6 +570,8 @@ class Recording extends DataClass implements Insertable<Recording> {
       language: language == null && nullToAbsent
           ? const Value.absent()
           : Value(language),
+      folder:
+          folder == null && nullToAbsent ? const Value.absent() : Value(folder),
     );
   }
 
@@ -577,6 +605,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       localOnly: serializer.fromJson<bool>(json['localOnly']),
       templateId: serializer.fromJson<String?>(json['templateId']),
       language: serializer.fromJson<String?>(json['language']),
+      folder: serializer.fromJson<String?>(json['folder']),
     );
   }
   @override
@@ -608,6 +637,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       'localOnly': serializer.toJson<bool>(localOnly),
       'templateId': serializer.toJson<String?>(templateId),
       'language': serializer.toJson<String?>(language),
+      'folder': serializer.toJson<String?>(folder),
     };
   }
 
@@ -632,7 +662,8 @@ class Recording extends DataClass implements Insertable<Recording> {
           bool? priority,
           bool? localOnly,
           Value<String?> templateId = const Value.absent(),
-          Value<String?> language = const Value.absent()}) =>
+          Value<String?> language = const Value.absent(),
+          Value<String?> folder = const Value.absent()}) =>
       Recording(
         id: id ?? this.id,
         title: title ?? this.title,
@@ -672,6 +703,7 @@ class Recording extends DataClass implements Insertable<Recording> {
         localOnly: localOnly ?? this.localOnly,
         templateId: templateId.present ? templateId.value : this.templateId,
         language: language.present ? language.value : this.language,
+        folder: folder.present ? folder.value : this.folder,
       );
   Recording copyWithCompanion(RecordingsCompanion data) {
     return Recording(
@@ -719,6 +751,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       templateId:
           data.templateId.present ? data.templateId.value : this.templateId,
       language: data.language.present ? data.language.value : this.language,
+      folder: data.folder.present ? data.folder.value : this.folder,
     );
   }
 
@@ -745,7 +778,8 @@ class Recording extends DataClass implements Insertable<Recording> {
           ..write('priority: $priority, ')
           ..write('localOnly: $localOnly, ')
           ..write('templateId: $templateId, ')
-          ..write('language: $language')
+          ..write('language: $language, ')
+          ..write('folder: $folder')
           ..write(')'))
         .toString();
   }
@@ -772,7 +806,8 @@ class Recording extends DataClass implements Insertable<Recording> {
         priority,
         localOnly,
         templateId,
-        language
+        language,
+        folder
       ]);
   @override
   bool operator ==(Object other) =>
@@ -798,7 +833,8 @@ class Recording extends DataClass implements Insertable<Recording> {
           other.priority == this.priority &&
           other.localOnly == this.localOnly &&
           other.templateId == this.templateId &&
-          other.language == this.language);
+          other.language == this.language &&
+          other.folder == this.folder);
 }
 
 class RecordingsCompanion extends UpdateCompanion<Recording> {
@@ -823,6 +859,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
   final Value<bool> localOnly;
   final Value<String?> templateId;
   final Value<String?> language;
+  final Value<String?> folder;
   final Value<int> rowid;
   const RecordingsCompanion({
     this.id = const Value.absent(),
@@ -846,6 +883,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     this.localOnly = const Value.absent(),
     this.templateId = const Value.absent(),
     this.language = const Value.absent(),
+    this.folder = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RecordingsCompanion.insert({
@@ -870,6 +908,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     this.localOnly = const Value.absent(),
     this.templateId = const Value.absent(),
     this.language = const Value.absent(),
+    this.folder = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         startedAt = Value(startedAt);
@@ -895,6 +934,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     Expression<bool>? localOnly,
     Expression<String>? templateId,
     Expression<String>? language,
+    Expression<String>? folder,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -923,6 +963,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       if (localOnly != null) 'local_only': localOnly,
       if (templateId != null) 'template_id': templateId,
       if (language != null) 'language': language,
+      if (folder != null) 'folder': folder,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -949,6 +990,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       Value<bool>? localOnly,
       Value<String?>? templateId,
       Value<String?>? language,
+      Value<String?>? folder,
       Value<int>? rowid}) {
     return RecordingsCompanion(
       id: id ?? this.id,
@@ -976,6 +1018,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       localOnly: localOnly ?? this.localOnly,
       templateId: templateId ?? this.templateId,
       language: language ?? this.language,
+      folder: folder ?? this.folder,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1050,6 +1093,9 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     if (language.present) {
       map['language'] = Variable<String>(language.value);
     }
+    if (folder.present) {
+      map['folder'] = Variable<String>(folder.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1080,6 +1126,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
           ..write('localOnly: $localOnly, ')
           ..write('templateId: $templateId, ')
           ..write('language: $language, ')
+          ..write('folder: $folder, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4373,6 +4420,489 @@ class RecallChunksCompanion extends UpdateCompanion<RecallChunkRow> {
   }
 }
 
+class $TagsTable extends Tags with TableInfo<$TagsTable, TagRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _normalizedMeta =
+      const VerificationMeta('normalized');
+  @override
+  late final GeneratedColumn<String> normalized = GeneratedColumn<String>(
+      'normalized', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [id, name, normalized, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tags';
+  @override
+  VerificationContext validateIntegrity(Insertable<TagRow> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('normalized')) {
+      context.handle(
+          _normalizedMeta,
+          normalized.isAcceptableOrUnknown(
+              data['normalized']!, _normalizedMeta));
+    } else if (isInserting) {
+      context.missing(_normalizedMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+        {normalized},
+      ];
+  @override
+  TagRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TagRow(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      normalized: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}normalized'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $TagsTable createAlias(String alias) {
+    return $TagsTable(attachedDatabase, alias);
+  }
+}
+
+class TagRow extends DataClass implements Insertable<TagRow> {
+  final String id;
+
+  /// As typed, and shown as typed.
+  final String name;
+
+  /// Lower-cased, trimmed, whitespace collapsed. "Work", "work" and " Work " are one
+  /// tag: a filter that silently splits across three spellings of the same word is worse
+  /// than no filter, because the missing recordings look deleted.
+  final String normalized;
+  final DateTime createdAt;
+  const TagRow(
+      {required this.id,
+      required this.name,
+      required this.normalized,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['normalized'] = Variable<String>(normalized);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  TagsCompanion toCompanion(bool nullToAbsent) {
+    return TagsCompanion(
+      id: Value(id),
+      name: Value(name),
+      normalized: Value(normalized),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory TagRow.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TagRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      normalized: serializer.fromJson<String>(json['normalized']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'normalized': serializer.toJson<String>(normalized),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  TagRow copyWith(
+          {String? id,
+          String? name,
+          String? normalized,
+          DateTime? createdAt}) =>
+      TagRow(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        normalized: normalized ?? this.normalized,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  TagRow copyWithCompanion(TagsCompanion data) {
+    return TagRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      normalized:
+          data.normalized.present ? data.normalized.value : this.normalized,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('normalized: $normalized, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, normalized, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TagRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.normalized == this.normalized &&
+          other.createdAt == this.createdAt);
+}
+
+class TagsCompanion extends UpdateCompanion<TagRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> normalized;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const TagsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.normalized = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TagsCompanion.insert({
+    required String id,
+    required String name,
+    required String normalized,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name),
+        normalized = Value(normalized),
+        createdAt = Value(createdAt);
+  static Insertable<TagRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? normalized,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (normalized != null) 'normalized': normalized,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TagsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<String>? normalized,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return TagsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      normalized: normalized ?? this.normalized,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (normalized.present) {
+      map['normalized'] = Variable<String>(normalized.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('normalized: $normalized, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RecordingTagsTable extends RecordingTags
+    with TableInfo<$RecordingTagsTable, RecordingTagRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RecordingTagsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _recordingIdMeta =
+      const VerificationMeta('recordingId');
+  @override
+  late final GeneratedColumn<String> recordingId = GeneratedColumn<String>(
+      'recording_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES recordings (id) ON DELETE CASCADE'));
+  static const VerificationMeta _tagIdMeta = const VerificationMeta('tagId');
+  @override
+  late final GeneratedColumn<String> tagId = GeneratedColumn<String>(
+      'tag_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'REFERENCES tags (id) ON DELETE CASCADE'));
+  @override
+  List<GeneratedColumn> get $columns => [recordingId, tagId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'recording_tags';
+  @override
+  VerificationContext validateIntegrity(Insertable<RecordingTagRow> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('recording_id')) {
+      context.handle(
+          _recordingIdMeta,
+          recordingId.isAcceptableOrUnknown(
+              data['recording_id']!, _recordingIdMeta));
+    } else if (isInserting) {
+      context.missing(_recordingIdMeta);
+    }
+    if (data.containsKey('tag_id')) {
+      context.handle(
+          _tagIdMeta, tagId.isAcceptableOrUnknown(data['tag_id']!, _tagIdMeta));
+    } else if (isInserting) {
+      context.missing(_tagIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {recordingId, tagId};
+  @override
+  RecordingTagRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RecordingTagRow(
+      recordingId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}recording_id'])!,
+      tagId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}tag_id'])!,
+    );
+  }
+
+  @override
+  $RecordingTagsTable createAlias(String alias) {
+    return $RecordingTagsTable(attachedDatabase, alias);
+  }
+}
+
+class RecordingTagRow extends DataClass implements Insertable<RecordingTagRow> {
+  final String recordingId;
+  final String tagId;
+  const RecordingTagRow({required this.recordingId, required this.tagId});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['recording_id'] = Variable<String>(recordingId);
+    map['tag_id'] = Variable<String>(tagId);
+    return map;
+  }
+
+  RecordingTagsCompanion toCompanion(bool nullToAbsent) {
+    return RecordingTagsCompanion(
+      recordingId: Value(recordingId),
+      tagId: Value(tagId),
+    );
+  }
+
+  factory RecordingTagRow.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RecordingTagRow(
+      recordingId: serializer.fromJson<String>(json['recordingId']),
+      tagId: serializer.fromJson<String>(json['tagId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'recordingId': serializer.toJson<String>(recordingId),
+      'tagId': serializer.toJson<String>(tagId),
+    };
+  }
+
+  RecordingTagRow copyWith({String? recordingId, String? tagId}) =>
+      RecordingTagRow(
+        recordingId: recordingId ?? this.recordingId,
+        tagId: tagId ?? this.tagId,
+      );
+  RecordingTagRow copyWithCompanion(RecordingTagsCompanion data) {
+    return RecordingTagRow(
+      recordingId:
+          data.recordingId.present ? data.recordingId.value : this.recordingId,
+      tagId: data.tagId.present ? data.tagId.value : this.tagId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecordingTagRow(')
+          ..write('recordingId: $recordingId, ')
+          ..write('tagId: $tagId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(recordingId, tagId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RecordingTagRow &&
+          other.recordingId == this.recordingId &&
+          other.tagId == this.tagId);
+}
+
+class RecordingTagsCompanion extends UpdateCompanion<RecordingTagRow> {
+  final Value<String> recordingId;
+  final Value<String> tagId;
+  final Value<int> rowid;
+  const RecordingTagsCompanion({
+    this.recordingId = const Value.absent(),
+    this.tagId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RecordingTagsCompanion.insert({
+    required String recordingId,
+    required String tagId,
+    this.rowid = const Value.absent(),
+  })  : recordingId = Value(recordingId),
+        tagId = Value(tagId);
+  static Insertable<RecordingTagRow> custom({
+    Expression<String>? recordingId,
+    Expression<String>? tagId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (recordingId != null) 'recording_id': recordingId,
+      if (tagId != null) 'tag_id': tagId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RecordingTagsCompanion copyWith(
+      {Value<String>? recordingId, Value<String>? tagId, Value<int>? rowid}) {
+    return RecordingTagsCompanion(
+      recordingId: recordingId ?? this.recordingId,
+      tagId: tagId ?? this.tagId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (recordingId.present) {
+      map['recording_id'] = Variable<String>(recordingId.value);
+    }
+    if (tagId.present) {
+      map['tag_id'] = Variable<String>(tagId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RecordingTagsCompanion(')
+          ..write('recordingId: $recordingId, ')
+          ..write('tagId: $tagId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$TranscriptDatabase extends GeneratedDatabase {
   _$TranscriptDatabase(QueryExecutor e) : super(e);
   $TranscriptDatabaseManager get managers => $TranscriptDatabaseManager(this);
@@ -4385,6 +4915,8 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
   late final $CodexNotesTable codexNotes = $CodexNotesTable(this);
   late final $GanttEntriesTable ganttEntries = $GanttEntriesTable(this);
   late final $RecallChunksTable recallChunks = $RecallChunksTable(this);
+  late final $TagsTable tags = $TagsTable(this);
+  late final $RecordingTagsTable recordingTags = $RecordingTagsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4397,7 +4929,9 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
         privacyAudits,
         codexNotes,
         ganttEntries,
-        recallChunks
+        recallChunks,
+        tags,
+        recordingTags
       ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules(
@@ -4437,6 +4971,20 @@ abstract class _$TranscriptDatabase extends GeneratedDatabase {
               TableUpdate('recall_chunks', kind: UpdateKind.delete),
             ],
           ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('recordings',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('recording_tags', kind: UpdateKind.delete),
+            ],
+          ),
+          WritePropagation(
+            on: TableUpdateQuery.onTableName('tags',
+                limitUpdateKind: UpdateKind.delete),
+            result: [
+              TableUpdate('recording_tags', kind: UpdateKind.delete),
+            ],
+          ),
         ],
       );
 }
@@ -4463,6 +5011,7 @@ typedef $$RecordingsTableCreateCompanionBuilder = RecordingsCompanion Function({
   Value<bool> localOnly,
   Value<String?> templateId,
   Value<String?> language,
+  Value<String?> folder,
   Value<int> rowid,
 });
 typedef $$RecordingsTableUpdateCompanionBuilder = RecordingsCompanion Function({
@@ -4487,6 +5036,7 @@ typedef $$RecordingsTableUpdateCompanionBuilder = RecordingsCompanion Function({
   Value<bool> localOnly,
   Value<String?> templateId,
   Value<String?> language,
+  Value<String?> folder,
   Value<int> rowid,
 });
 
@@ -4562,6 +5112,20 @@ final class $$RecordingsTableReferences
         .filter((f) => f.recordingId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_recallChunksRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$RecordingTagsTable, List<RecordingTagRow>>
+      _recordingTagsRefsTable(_$TranscriptDatabase db) =>
+          MultiTypedResultKey.fromTable(db.recordingTags,
+              aliasName: 'recordings__id__recording_tags__recording_id');
+
+  $$RecordingTagsTableProcessedTableManager get recordingTagsRefs {
+    final manager = $$RecordingTagsTableTableManager($_db, $_db.recordingTags)
+        .filter((f) => f.recordingId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_recordingTagsRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -4646,6 +5210,9 @@ class $$RecordingsTableFilterComposer
 
   ColumnFilters<String> get language => $composableBuilder(
       column: $table.language, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get folder => $composableBuilder(
+      column: $table.folder, builder: (column) => ColumnFilters(column));
 
   Expression<bool> chunksRefs(
       Expression<bool> Function($$ChunksTableFilterComposer f) f) {
@@ -4751,6 +5318,27 @@ class $$RecordingsTableFilterComposer
             ));
     return f(composer);
   }
+
+  Expression<bool> recordingTagsRefs(
+      Expression<bool> Function($$RecordingTagsTableFilterComposer f) f) {
+    final $$RecordingTagsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.recordingTags,
+        getReferencedColumn: (t) => t.recordingId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingTagsTableFilterComposer(
+              $db: $db,
+              $table: $db.recordingTags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$RecordingsTableOrderingComposer
@@ -4834,6 +5422,9 @@ class $$RecordingsTableOrderingComposer
 
   ColumnOrderings<String> get language => $composableBuilder(
       column: $table.language, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get folder => $composableBuilder(
+      column: $table.folder, builder: (column) => ColumnOrderings(column));
 }
 
 class $$RecordingsTableAnnotationComposer
@@ -4907,6 +5498,9 @@ class $$RecordingsTableAnnotationComposer
 
   GeneratedColumn<String> get language =>
       $composableBuilder(column: $table.language, builder: (column) => column);
+
+  GeneratedColumn<String> get folder =>
+      $composableBuilder(column: $table.folder, builder: (column) => column);
 
   Expression<T> chunksRefs<T extends Object>(
       Expression<T> Function($$ChunksTableAnnotationComposer a) f) {
@@ -5012,6 +5606,27 @@ class $$RecordingsTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> recordingTagsRefs<T extends Object>(
+      Expression<T> Function($$RecordingTagsTableAnnotationComposer a) f) {
+    final $$RecordingTagsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.recordingTags,
+        getReferencedColumn: (t) => t.recordingId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingTagsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.recordingTags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$RecordingsTableTableManager extends RootTableManager<
@@ -5030,7 +5645,8 @@ class $$RecordingsTableTableManager extends RootTableManager<
         bool actionRemindersRefs,
         bool codexNotesRefs,
         bool ganttEntriesRefs,
-        bool recallChunksRefs})> {
+        bool recallChunksRefs,
+        bool recordingTagsRefs})> {
   $$RecordingsTableTableManager(_$TranscriptDatabase db, $RecordingsTable table)
       : super(TableManagerState(
           db: db,
@@ -5063,6 +5679,7 @@ class $$RecordingsTableTableManager extends RootTableManager<
             Value<bool> localOnly = const Value.absent(),
             Value<String?> templateId = const Value.absent(),
             Value<String?> language = const Value.absent(),
+            Value<String?> folder = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               RecordingsCompanion(
@@ -5087,6 +5704,7 @@ class $$RecordingsTableTableManager extends RootTableManager<
             localOnly: localOnly,
             templateId: templateId,
             language: language,
+            folder: folder,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -5111,6 +5729,7 @@ class $$RecordingsTableTableManager extends RootTableManager<
             Value<bool> localOnly = const Value.absent(),
             Value<String?> templateId = const Value.absent(),
             Value<String?> language = const Value.absent(),
+            Value<String?> folder = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               RecordingsCompanion.insert(
@@ -5135,6 +5754,7 @@ class $$RecordingsTableTableManager extends RootTableManager<
             localOnly: localOnly,
             templateId: templateId,
             language: language,
+            folder: folder,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -5148,7 +5768,8 @@ class $$RecordingsTableTableManager extends RootTableManager<
               actionRemindersRefs = false,
               codexNotesRefs = false,
               ganttEntriesRefs = false,
-              recallChunksRefs = false}) {
+              recallChunksRefs = false,
+              recordingTagsRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
@@ -5156,7 +5777,8 @@ class $$RecordingsTableTableManager extends RootTableManager<
                 if (actionRemindersRefs) db.actionReminders,
                 if (codexNotesRefs) db.codexNotes,
                 if (ganttEntriesRefs) db.ganttEntries,
-                if (recallChunksRefs) db.recallChunks
+                if (recallChunksRefs) db.recallChunks,
+                if (recordingTagsRefs) db.recordingTags
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -5225,6 +5847,19 @@ class $$RecordingsTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem:
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.recordingId == item.id),
+                        typedResults: items),
+                  if (recordingTagsRefs)
+                    await $_getPrefetchedData<Recording, $RecordingsTable,
+                            RecordingTagRow>(
+                        currentTable: table,
+                        referencedTable: $$RecordingsTableReferences
+                            ._recordingTagsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$RecordingsTableReferences(db, table, p0)
+                                .recordingTagsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.recordingId == item.id),
                         typedResults: items)
                 ];
               },
@@ -5249,7 +5884,8 @@ typedef $$RecordingsTableProcessedTableManager = ProcessedTableManager<
         bool actionRemindersRefs,
         bool codexNotesRefs,
         bool ganttEntriesRefs,
-        bool recallChunksRefs})>;
+        bool recallChunksRefs,
+        bool recordingTagsRefs})>;
 typedef $$ChunksTableCreateCompanionBuilder = ChunksCompanion Function({
   required String id,
   required String recordingId,
@@ -7372,6 +8008,551 @@ typedef $$RecallChunksTableProcessedTableManager = ProcessedTableManager<
     (RecallChunkRow, $$RecallChunksTableReferences),
     RecallChunkRow,
     PrefetchHooks Function({bool recordingId})>;
+typedef $$TagsTableCreateCompanionBuilder = TagsCompanion Function({
+  required String id,
+  required String name,
+  required String normalized,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$TagsTableUpdateCompanionBuilder = TagsCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String> normalized,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+final class $$TagsTableReferences
+    extends BaseReferences<_$TranscriptDatabase, $TagsTable, TagRow> {
+  $$TagsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$RecordingTagsTable, List<RecordingTagRow>>
+      _recordingTagsRefsTable(_$TranscriptDatabase db) =>
+          MultiTypedResultKey.fromTable(db.recordingTags,
+              aliasName: 'tags__id__recording_tags__tag_id');
+
+  $$RecordingTagsTableProcessedTableManager get recordingTagsRefs {
+    final manager = $$RecordingTagsTableTableManager($_db, $_db.recordingTags)
+        .filter((f) => f.tagId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_recordingTagsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
+
+class $$TagsTableFilterComposer
+    extends Composer<_$TranscriptDatabase, $TagsTable> {
+  $$TagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get normalized => $composableBuilder(
+      column: $table.normalized, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  Expression<bool> recordingTagsRefs(
+      Expression<bool> Function($$RecordingTagsTableFilterComposer f) f) {
+    final $$RecordingTagsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.recordingTags,
+        getReferencedColumn: (t) => t.tagId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingTagsTableFilterComposer(
+              $db: $db,
+              $table: $db.recordingTags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
+class $$TagsTableOrderingComposer
+    extends Composer<_$TranscriptDatabase, $TagsTable> {
+  $$TagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get normalized => $composableBuilder(
+      column: $table.normalized, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$TagsTableAnnotationComposer
+    extends Composer<_$TranscriptDatabase, $TagsTable> {
+  $$TagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get normalized => $composableBuilder(
+      column: $table.normalized, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> recordingTagsRefs<T extends Object>(
+      Expression<T> Function($$RecordingTagsTableAnnotationComposer a) f) {
+    final $$RecordingTagsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.recordingTags,
+        getReferencedColumn: (t) => t.tagId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingTagsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.recordingTags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
+class $$TagsTableTableManager extends RootTableManager<
+    _$TranscriptDatabase,
+    $TagsTable,
+    TagRow,
+    $$TagsTableFilterComposer,
+    $$TagsTableOrderingComposer,
+    $$TagsTableAnnotationComposer,
+    $$TagsTableCreateCompanionBuilder,
+    $$TagsTableUpdateCompanionBuilder,
+    (TagRow, $$TagsTableReferences),
+    TagRow,
+    PrefetchHooks Function({bool recordingTagsRefs})> {
+  $$TagsTableTableManager(_$TranscriptDatabase db, $TagsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String> normalized = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TagsCompanion(
+            id: id,
+            name: name,
+            normalized: normalized,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            required String normalized,
+            required DateTime createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TagsCompanion.insert(
+            id: id,
+            name: name,
+            normalized: normalized,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable<$TagsTable, TagRow>(table),
+                    $$TagsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({recordingTagsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [
+                if (recordingTagsRefs) db.recordingTags
+              ],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (recordingTagsRefs)
+                    await $_getPrefetchedData<TagRow, $TagsTable,
+                            RecordingTagRow>(
+                        currentTable: table,
+                        referencedTable:
+                            $$TagsTableReferences._recordingTagsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$TagsTableReferences(db, table, p0)
+                                .recordingTagsRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.tagId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$TagsTableProcessedTableManager = ProcessedTableManager<
+    _$TranscriptDatabase,
+    $TagsTable,
+    TagRow,
+    $$TagsTableFilterComposer,
+    $$TagsTableOrderingComposer,
+    $$TagsTableAnnotationComposer,
+    $$TagsTableCreateCompanionBuilder,
+    $$TagsTableUpdateCompanionBuilder,
+    (TagRow, $$TagsTableReferences),
+    TagRow,
+    PrefetchHooks Function({bool recordingTagsRefs})>;
+typedef $$RecordingTagsTableCreateCompanionBuilder = RecordingTagsCompanion
+    Function({
+  required String recordingId,
+  required String tagId,
+  Value<int> rowid,
+});
+typedef $$RecordingTagsTableUpdateCompanionBuilder = RecordingTagsCompanion
+    Function({
+  Value<String> recordingId,
+  Value<String> tagId,
+  Value<int> rowid,
+});
+
+final class $$RecordingTagsTableReferences extends BaseReferences<
+    _$TranscriptDatabase, $RecordingTagsTable, RecordingTagRow> {
+  $$RecordingTagsTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $RecordingsTable _recordingIdTable(_$TranscriptDatabase db) =>
+      db.recordings.createAlias('recording_tags__recording_id__recordings__id');
+
+  $$RecordingsTableProcessedTableManager get recordingId {
+    final $_column = $_itemColumn<String>('recording_id')!;
+
+    final manager = $$RecordingsTableTableManager($_db, $_db.recordings)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_recordingIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static $TagsTable _tagIdTable(_$TranscriptDatabase db) =>
+      db.tags.createAlias('recording_tags__tag_id__tags__id');
+
+  $$TagsTableProcessedTableManager get tagId {
+    final $_column = $_itemColumn<String>('tag_id')!;
+
+    final manager = $$TagsTableTableManager($_db, $_db.tags)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_tagIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$RecordingTagsTableFilterComposer
+    extends Composer<_$TranscriptDatabase, $RecordingTagsTable> {
+  $$RecordingTagsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$RecordingsTableFilterComposer get recordingId {
+    final $$RecordingsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableFilterComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$TagsTableFilterComposer get tagId {
+    final $$TagsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.tagId,
+        referencedTable: $db.tags,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TagsTableFilterComposer(
+              $db: $db,
+              $table: $db.tags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$RecordingTagsTableOrderingComposer
+    extends Composer<_$TranscriptDatabase, $RecordingTagsTable> {
+  $$RecordingTagsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$RecordingsTableOrderingComposer get recordingId {
+    final $$RecordingsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableOrderingComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$TagsTableOrderingComposer get tagId {
+    final $$TagsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.tagId,
+        referencedTable: $db.tags,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TagsTableOrderingComposer(
+              $db: $db,
+              $table: $db.tags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$RecordingTagsTableAnnotationComposer
+    extends Composer<_$TranscriptDatabase, $RecordingTagsTable> {
+  $$RecordingTagsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  $$RecordingsTableAnnotationComposer get recordingId {
+    final $$RecordingsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.recordingId,
+        referencedTable: $db.recordings,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$RecordingsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.recordings,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  $$TagsTableAnnotationComposer get tagId {
+    final $$TagsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.tagId,
+        referencedTable: $db.tags,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TagsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.tags,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$RecordingTagsTableTableManager extends RootTableManager<
+    _$TranscriptDatabase,
+    $RecordingTagsTable,
+    RecordingTagRow,
+    $$RecordingTagsTableFilterComposer,
+    $$RecordingTagsTableOrderingComposer,
+    $$RecordingTagsTableAnnotationComposer,
+    $$RecordingTagsTableCreateCompanionBuilder,
+    $$RecordingTagsTableUpdateCompanionBuilder,
+    (RecordingTagRow, $$RecordingTagsTableReferences),
+    RecordingTagRow,
+    PrefetchHooks Function({bool recordingId, bool tagId})> {
+  $$RecordingTagsTableTableManager(
+      _$TranscriptDatabase db, $RecordingTagsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RecordingTagsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RecordingTagsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RecordingTagsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> recordingId = const Value.absent(),
+            Value<String> tagId = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RecordingTagsCompanion(
+            recordingId: recordingId,
+            tagId: tagId,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String recordingId,
+            required String tagId,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RecordingTagsCompanion.insert(
+            recordingId: recordingId,
+            tagId: tagId,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable<$RecordingTagsTable, RecordingTagRow>(table),
+                    $$RecordingTagsTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({recordingId = false, tagId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (recordingId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.recordingId,
+                    referencedTable:
+                        $$RecordingTagsTableReferences._recordingIdTable(db),
+                    referencedColumn:
+                        $$RecordingTagsTableReferences._recordingIdTable(db).id,
+                  ) as T;
+                }
+                if (tagId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.tagId,
+                    referencedTable:
+                        $$RecordingTagsTableReferences._tagIdTable(db),
+                    referencedColumn:
+                        $$RecordingTagsTableReferences._tagIdTable(db).id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$RecordingTagsTableProcessedTableManager = ProcessedTableManager<
+    _$TranscriptDatabase,
+    $RecordingTagsTable,
+    RecordingTagRow,
+    $$RecordingTagsTableFilterComposer,
+    $$RecordingTagsTableOrderingComposer,
+    $$RecordingTagsTableAnnotationComposer,
+    $$RecordingTagsTableCreateCompanionBuilder,
+    $$RecordingTagsTableUpdateCompanionBuilder,
+    (RecordingTagRow, $$RecordingTagsTableReferences),
+    RecordingTagRow,
+    PrefetchHooks Function({bool recordingId, bool tagId})>;
 
 class $TranscriptDatabaseManager {
   final _$TranscriptDatabase _db;
@@ -7392,4 +8573,7 @@ class $TranscriptDatabaseManager {
       $$GanttEntriesTableTableManager(_db, _db.ganttEntries);
   $$RecallChunksTableTableManager get recallChunks =>
       $$RecallChunksTableTableManager(_db, _db.recallChunks);
+  $$TagsTableTableManager get tags => $$TagsTableTableManager(_db, _db.tags);
+  $$RecordingTagsTableTableManager get recordingTags =>
+      $$RecordingTagsTableTableManager(_db, _db.recordingTags);
 }

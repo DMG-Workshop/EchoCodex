@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,11 +8,13 @@ import 'package:transcript_core/transcript_core.dart';
 
 import '../data/database.dart' as db;
 import '../data/repository.dart';
+import '../recording/desktop_playback.dart';
 import '../recording/recording_controller.dart';
 import 'package:intl/intl.dart';
 
 import 'board_view.dart';
 import 'export_sheet.dart';
+import 'tag_sheet.dart';
 import 'calendar_view.dart';
 import 'gantt_entry_sheet.dart';
 import 'timeline_view.dart';
@@ -112,6 +113,13 @@ class _NoteView extends ConsumerWidget {
             overflow: TextOverflow.ellipsis,
           ),
           actions: [
+            // Available whether or not a note exists: a recording still waiting to be
+            // written is exactly the one worth filing before it gets lost in the list.
+            IconButton(
+              icon: const Icon(Icons.sell_outlined),
+              tooltip: 'Tags and folder',
+              onPressed: () => openTagSheet(context, ref, recording),
+            ),
             if (note != null)
               IconButton(
                 icon: const Icon(Icons.ios_share),
@@ -637,7 +645,7 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
     // Windows, constructing the player reaches an unimplemented platform channel —
     // so the tab that shows the transcript would fail on the way in, taking the
     // readable transcript down with the playback nobody could have had anyway.
-    if (!audioPlaybackSupported()) return;
+    if (audioPlaybackUnavailable() != null) return;
     final player = AudioPlayer();
     _player = player;
     _positionSub = player.positionStream.listen((position) {
@@ -839,8 +847,8 @@ class _TranscriptTabState extends ConsumerState<_TranscriptTab> {
         ),
         if (_player == null &&
             widget.recording.audioPath != null &&
-            !audioPlaybackSupported())
-          _NoPlaybackHere(),
+            audioPlaybackUnavailable() != null)
+          _NoPlaybackHere(reason: audioPlaybackUnavailable()!),
         if (_player != null)
           _PlaybackBar(
             position: _position,
@@ -1294,25 +1302,17 @@ class _NameSpeakersDialogState extends State<_NameSpeakersDialog> {
 }
 
 
-/// Whether audio playback has a platform implementation here.
-///
-/// just_audio covers Android, iOS and macOS; there is no Linux or Windows
-/// implementation, so an AudioPlayer built there throws on an unimplemented channel.
-///
-/// A replaceable function rather than a direct Platform check because `flutter test`
-/// runs on the host — usually Linux — so a hard check would mean the supported branch
-/// was never exercised by any test, on any machine, which is the branch every phone
-/// actually takes.
-bool Function() audioPlaybackSupported =
-    () => !Platform.isLinux && !Platform.isWindows;
-
 /// Says why there is no play button, rather than leaving a gap.
 ///
-/// The audio is still on disk and still exported; only playing it back inside the app
-/// is missing. A user who recorded something and then cannot find the play control is
-/// owed that distinction.
+/// The audio is still on disk and still exported; only playing it back inside the app is
+/// missing. A user who recorded something and then cannot find the play control is owed
+/// that distinction — and, where there is something they can do about it, the sentence
+/// that says what. The reason comes from [audioPlaybackUnavailable] rather than being
+/// decided here, so this widget has no platform knowledge in it.
 class _NoPlaybackHere extends StatelessWidget {
-  const _NoPlaybackHere();
+  const _NoPlaybackHere({required this.reason});
+
+  final String reason;
 
   @override
   Widget build(BuildContext context) {
@@ -1326,8 +1326,7 @@ class _NoPlaybackHere extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'Playback is not available on this platform yet. The recording is '
-              'still saved, and still exports.',
+              reason,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
